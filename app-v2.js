@@ -692,15 +692,13 @@ function fermerRecherche(){
 
 function showPage(pageId){
   if(pageId === "administration") renderAdministration();
-  if(pageId === "agenda") { renderCalendrierRdv(); renderRendezVous(); renderCalendrierMensuel(); }
+  if(pageId === "agenda") { renderCalendrierRdv(); renderRendezVous(); renderCalendrierMensuel(); setTimeout(()=>{ renderPlanning(); }, 0); }
   if(pageId === "mecanique") { setTimeout(()=>{ renderDossiersMecanique(); majCompteursMecanique(); remplirTarifsMecanique(); }, 0); }
   if(pageId === "dashboardMecanique") { setTimeout(()=>{ renderDashboardMecanique(); }, 0); }
-  if(pageId === "devisFacture") { setTimeout(()=>{ majNumeroDocument(); }, 100); }
+  if(pageId === "devisFacture") { setTimeout(()=>{ majNumeroDocument(); renderCatalogue(); renderCommandes(); majCompteursCmds(); renderCalc(); }, 100); }
   if(pageId === "relancesAssurance") { setTimeout(()=>{ initRelancesAssurance(); }, 0); }
   // Nouveaux modules
   if(pageId === "stockPieces")         { setTimeout(()=>{ renderStock(); }, 0); }
-  if(pageId === "planningTechniciens") { setTimeout(()=>{ renderPlanning(); }, 0); }
-  if(pageId === "outilsRapides")       { setTimeout(()=>{ renderCatalogue(); renderCommandes(); renderCalc(); majCompteursCmds(); }, 0); }
   document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   const page = document.getElementById(pageId);
   if(page) page.classList.remove("hidden");
@@ -6094,11 +6092,11 @@ function renderCatalogue(){
 function ajouterTarifAuDevis(idx){
   const t = catalogueTarifs[idx];
   if(!t) return;
-  if(typeof lignesDocument === "undefined"){ toast("Ouvrez d'abord le module Devis/Factures","error"); return; }
+  if(typeof lignesDocument === "undefined"){ toast("Erreur : lignesDocument introuvable","error"); return; }
   lignesDocument.push({ design: t.designation, qte: 1, prixHT: t.prixHT, tva: t.tva });
-  showPage("devisFacture");
-  setTimeout(()=>{ if(typeof renderLignes==="function") renderLignes(); }, 150);
-  toast(`"${t.designation}" ajouté au devis ✓`);
+  if(typeof renderLignes==="function") renderLignes();
+  document.getElementById("tableauLignes")?.scrollIntoView({behavior:"smooth", block:"center"});
+  toast(`"${t.designation}" ajouté au formulaire ✓`);
 }
 
 function ajouterTarifAuCalc(idx){
@@ -6235,8 +6233,10 @@ function envoyerCalcVersDevis(){
   if(_calcLignes.length === 0){ toast("Aucune ligne à envoyer","error"); return; }
   if(typeof lignesDocument === "undefined"){ toast("Module Devis/Factures indisponible","error"); return; }
   lignesDocument = _calcLignes.map(l=>({ design: l.designation, qte: l.qte, prixHT: l.prixHT, tva: l.tva }));
-  showPage("devisFacture");
-  setTimeout(()=>{ if(typeof renderLignes==="function") renderLignes(); toast(`${_calcLignes.length} ligne(s) envoyée(s) vers Devis/Factures ✓`); }, 150);
+  if(typeof renderLignes==="function") renderLignes();
+  // Scroll vers le formulaire de devis
+  document.getElementById("tableauLignes")?.scrollIntoView({behavior:"smooth", block:"center"});
+  toast(`${_calcLignes.length} ligne(s) envoyée(s) dans le formulaire ✓`);
 }
 
 function copierCalcTexte(){
