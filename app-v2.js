@@ -3785,8 +3785,7 @@ function supprimerDossierMecanique(index){
     renderDossiersMecanique();
     toast("Dossier supprimé ✓");
   }
-}
-function supprimerDossierMecanique(index){
+}nction supprimerDossierMecanique(index){
   if(!window.confirm("Supprimer définitivement ce dossier mécanique ?\nCette action est irréversible.")) return;
   dossiersMecanique.splice(index, 1);
   saveData();
@@ -9231,6 +9230,7 @@ function majBadgesMenu(){
   // Factures impayées
   const impayees = documents.filter(d=>d.type==="facture"&&d.statutReglement==="Non réglé").length;
   set("badgeImpaye", impayees, true);
+  set("badgeImpayeNav", impayees, true);
 
   // Rendez-vous aujourd'hui
   const today = new Date().toISOString().split("T")[0];
