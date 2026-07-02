@@ -247,7 +247,7 @@ function supprimerUtilisateur(index){
   const session = getSessionUtilisateur();
   if(users[index].login === session?.login){ toast("Impossible de supprimer votre propre compte", "error"); return; }
   if(!window.confirm("Supprimer cet utilisateur ?\nCette action est irréversible.")) return;
-  const users=getUtilisateurs(); users.splice(index,1); saveUtilisateurs(users); toast("Utilisateur supprimé"); renderAdministration();
+  users.splice(index,1); saveUtilisateurs(users); toast("Utilisateur supprimé"); renderAdministration();
 }
 
 function changerPassUtilisateur(index){
@@ -1534,14 +1534,42 @@ function resetFormDossier(){
 }
 
 function supprimerDossier(index){
-  if(!window.confirm("Supprimer définitivement ce dossier ?\nCette action est irréversible.")) return;
-  dossiers.splice(index, 1);
-  saveData();
-  renderDossiers();
-  renderDossiersRecent();
-  chargerDossiersSelect();
-  majDashboard();
-  toast("Dossier supprimé");
+  // Créer un mini-panneau de confirmation dans la ligne du tableau
+  const btn = event?.target || document.querySelector(`[onclick*="supprimerDossier(${index})"]`);
+  if(btn){
+    // Si confirmation déjà affichée, exécuter
+    if(btn.dataset.confirming === "1"){
+      dossiers.splice(index, 1);
+      saveData();
+      renderDossiers();
+      renderDossiersRecent();
+      chargerDossiersSelect();
+      majDashboard();
+      toast("Dossier supprimé ✓");
+      return;
+    }
+    // Sinon demander confirmation visuelle
+    btn.dataset.confirming = "1";
+    const origText = btn.innerHTML;
+    btn.innerHTML = "⚠️ Confirmer ?";
+    btn.style.background = "#dc2626";
+    btn.style.animation = "none";
+    // Annuler après 3 secondes
+    setTimeout(()=>{
+      if(btn.dataset.confirming === "1"){
+        btn.dataset.confirming = "";
+        btn.innerHTML = origText;
+        btn.style.background = "";
+      }
+    }, 3000);
+  } else {
+    // Fallback sans élément bouton
+    dossiers.splice(index, 1);
+    saveData();
+    renderDossiers();
+    majDashboard();
+    toast("Dossier supprimé ✓");
+  }
 }
 
 function changerStatutDossier(index, statut){
@@ -3730,6 +3758,34 @@ function changerStatutMecanique(index, statut){
 ===================================== */
 
 function supprimerDossierMecanique(index){
+  const btn = event?.target || document.querySelector(`[onclick*="supprimerDossierMecanique(${index})"]`);
+  if(btn){
+    if(btn.dataset.confirming === "1"){
+      dossiersMecanique.splice(index, 1);
+      saveData();
+      renderDossiersMecanique();
+      majCompteursMecanique();
+      toast("Dossier supprimé ✓");
+      return;
+    }
+    btn.dataset.confirming = "1";
+    const origText = btn.innerHTML;
+    btn.innerHTML = "⚠️ Confirmer ?";
+    btn.style.background = "#dc2626";
+    setTimeout(()=>{
+      if(btn.dataset.confirming === "1"){
+        btn.dataset.confirming = "";
+        btn.innerHTML = origText;
+        btn.style.background = "";
+      }
+    }, 3000);
+  } else {
+    dossiersMecanique.splice(index, 1);
+    saveData();
+    renderDossiersMecanique();
+    toast("Dossier supprimé ✓");
+  }
+}nction supprimerDossierMecanique(index){
   if(!window.confirm("Supprimer définitivement ce dossier mécanique ?\nCette action est irréversible.")) return;
   dossiersMecanique.splice(index, 1);
   saveData();
@@ -9998,7 +10054,7 @@ function ouvrirRelancesImpayees(){
                   <button onclick="envoyerSmsRelance('${d.telephone}','${d.client}','${fmtE(solde)}')" style="background:#16a34a;font-size:12px;">📱 SMS relance</button>
                   <button onclick="window.open('tel:${d.telephone}')" style="background:#0891b2;font-size:12px;">📞 Appeler</button>`:""}
                 ${d.email?`<button onclick="window.open('mailto:${d.email}?subject=Relance+facture&body=Bonjour+${encodeURIComponent(d.client)}%2C+votre+facture+N%C2%B0${d.numero}+de+${encodeURIComponent(fmtE(solde))}+reste+impay%C3%A9e.')" style="background:#334155;font-size:12px;">✉️ Email</button>`:""}
-                <button onclick="fermerModal();${d._type==='vitrage'?`ouvrirFinancierDossier(${d._origIndex})`:`ouvrirFinancierMecanique(${d._origIndex})`};return false;" style="background:#7c3aed;font-size:12px;">💰 Encaisser</button>
+                <button onclick="encaisserDepuisRelance('${d._type}',${d._origIndex})" style="background:#7c3aed;font-size:12px;">💰 Encaisser</button>
               </div>
             </div>`;
           }).join("")}
@@ -10210,3 +10266,16 @@ document.addEventListener("DOMContentLoaded",()=>{
     if(btn) btn.textContent = "🌙 Mode sombre";
   }
 });
+
+function encaisserDepuisRelance(type, index){
+  fermerModal();
+  setTimeout(()=>{
+    if(type === "vitrage"){
+      showPage("dossiers");
+      setTimeout(()=>{ ouvrirFinancierDossier(index); }, 300);
+    } else {
+      showPage("mecanique");
+      setTimeout(()=>{ ouvrirFinancierMecanique(index); }, 300);
+    }
+  }, 200);
+}
