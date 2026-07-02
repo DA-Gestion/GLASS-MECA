@@ -3785,7 +3785,8 @@ function supprimerDossierMecanique(index){
     renderDossiersMecanique();
     toast("Dossier supprimé ✓");
   }
-}nction supprimerDossierMecanique(index){
+}
+function supprimerDossierMecanique(index){
   if(!window.confirm("Supprimer définitivement ce dossier mécanique ?\nCette action est irréversible.")) return;
   dossiersMecanique.splice(index, 1);
   saveData();
