@@ -246,7 +246,8 @@ function supprimerUtilisateur(index){
   const users = getUtilisateurs();
   const session = getSessionUtilisateur();
   if(users[index].login === session?.login){ toast("Impossible de supprimer votre propre compte", "error"); return; }
-  confirmerAction("Supprimer cet utilisateur ?", ()=>{ const users=getUtilisateurs(); users.splice(index,1); saveUtilisateurs(users); toast("Utilisateur supprimé"); renderAdministration(); });
+  if(!window.confirm("Supprimer cet utilisateur ?\nCette action est irréversible.")) return;
+  const users=getUtilisateurs(); users.splice(index,1); saveUtilisateurs(users); toast("Utilisateur supprimé"); renderAdministration();
 }
 
 function changerPassUtilisateur(index){
@@ -1091,7 +1092,8 @@ function ajouterVehicule(){
 }
 
 function supprimerVehicule(index){
-  confirmerAction("Supprimer ce véhicule ?", ()=>{ vehicules.splice(index,1); saveData(); renderVehicules(); majDashboard(); toast("Véhicule supprimé"); });
+  if(!window.confirm("Supprimer ce véhicule ?\nCette action est irréversible.")) return;
+  vehicules.splice(index,1); saveData(); renderVehicules(); majDashboard(); toast("Véhicule supprimé");
 }
 
 function modifierVehicule(index){
@@ -1184,7 +1186,8 @@ function ajouterClient(){
 }
 
 function supprimerClient(index){
-  confirmerAction("Supprimer ce client ?", ()=>{ clients.splice(index,1); saveData(); renderClients(); majDashboard(); toast("Client supprimé"); });
+  if(!window.confirm("Supprimer ce client ?\nCette action est irréversible.")) return;
+  clients.splice(index,1); saveData(); renderClients(); majDashboard(); toast("Client supprimé");
 }
 
 function modifierClient(index){
@@ -1280,7 +1283,8 @@ function ajouterAssurance(){
 }
 
 function supprimerAssurance(index){
-  confirmerAction("Supprimer cette assurance ?", ()=>{ assurances.splice(index,1); saveData(); renderAssurances(); chargerListeAssurances(); toast("Assurance supprimée"); });
+  if(!window.confirm("Supprimer cette assurance ?\nCette action est irréversible.")) return;
+  assurances.splice(index,1); saveData(); renderAssurances(); chargerListeAssurances(); toast("Assurance supprimée");
 }
 
 function renderAssurances(){
@@ -1530,15 +1534,14 @@ function resetFormDossier(){
 }
 
 function supprimerDossier(index){
-  confirmerAction("Supprimer définitivement ce dossier ?", ()=>{
-    dossiers.splice(index, 1);
-    saveData();
-    renderDossiers();
-    renderDossiersRecent();
-    chargerDossiersSelect();
-    majDashboard();
-    toast("Dossier supprimé");
-  });
+  if(!window.confirm("Supprimer définitivement ce dossier ?\nCette action est irréversible.")) return;
+  dossiers.splice(index, 1);
+  saveData();
+  renderDossiers();
+  renderDossiersRecent();
+  chargerDossiersSelect();
+  majDashboard();
+  toast("Dossier supprimé");
 }
 
 function changerStatutDossier(index, statut){
@@ -1868,7 +1871,7 @@ function executerTransfert(indexSource){
   const dest = dossiers[Number(indexDest)];
   if(!src || !dest){ toast("Dossier introuvable", "error"); return; }
 
-  confirmerAction(`Transférer les informations du dossier ${src.numero} vers ${dest.numero} ?`, ()=>{
+  if(!window.confirm(`Transférer les informations du dossier ${src.numero} vers ${dest.numero} ?`)) return;
   if(document.getElementById("trfClient")?.checked){
     dest.client    = src.client;
     dest.vehicule  = src.vehicule;
@@ -1902,8 +1905,7 @@ function executerTransfert(indexSource){
   renderDossiersRecent();
   majDashboard();
   document.getElementById("panneauTransfert").style.display = "none";
-  toast("Transfert effectué vers le dossier " + dest.numero + " ✓");
-  }); // fin confirmerAction
+  toast("Transfert effectué vers le dossier " + dest.numero + " ✓"); // fin confirmerAction
 }
 
 /* =====================================
@@ -2344,12 +2346,11 @@ function afficherEntreprise(){
 }
 
 function viderEntreprise(){
-  confirmerAction("Supprimer les informations société ?", ()=>{
-    entreprise = { nom:"", adresse:"", telephone:"", email:"", siret:"", logo:"" };
-    saveData();
-    chargerEntreprise();
-    toast("Informations réinitialisées");
-  });
+  if(!window.confirm("Supprimer les informations société ?\nToutes les infos garage seront effacées.")) return;
+  entreprise = { nom:"", adresse:"", telephone:"", email:"", siret:"", logo:"" };
+  saveData();
+  chargerEntreprise();
+  toast("Informations réinitialisées");
 }
 
 /* =====================================
@@ -2532,7 +2533,8 @@ function ajouterRendezVous(){
 }
 
 function supprimerRendezVous(index){
-  confirmerAction("Supprimer ce rendez-vous ?", ()=>{ rendezVous.splice(index,1); saveData(); renderRendezVous(); renderRdvDuJour(); toast("Rendez-vous supprimé"); });
+  if(!window.confirm("Supprimer ce rendez-vous ?\nCette action est irréversible.")) return;
+  rendezVous.splice(index,1); saveData(); renderRendezVous(); renderRdvDuJour(); toast("Rendez-vous supprimé");
 }
 
 function renderRendezVous(){
@@ -3053,13 +3055,12 @@ function majNumeroDocument(){
 
 
 function supprimerDocument(i){
-  confirmerAction("Supprimer ce document ?", ()=>{
-    documents.splice(i, 1);
+  if(!window.confirm("Supprimer ce document ?\nCette action est irréversible.")) return;
+  documents.splice(i, 1);
     localStorage.setItem("documents", JSON.stringify(documents));
     renderDocuments();
     majDashboard();
     toast("Document supprimé");
-  });
 }
 
 function chargerDocument(i){
@@ -3169,8 +3170,8 @@ function confirmerTransfertVersDossier(){
   if(!d){ toast("Dossier introuvable", "error"); return; }
 
   const icon = typeDos === "mecanique" ? "🔩" : "🪟";
-  confirmerAction(`Transférer ce ${typeDoc==="facture"?"facture":"devis"} (${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} €) vers le dossier ${icon} ${d.numero} — ${d.client} ?`, ()=>{
-    if(typeDos === "mecanique"){
+  if(!window.confirm(`Transférer ce ${typeDoc==="facture"?"facture":"devis"} (${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} €) vers le dossier ${icon} ${d.numero} — ${d.client} ?`)) return;
+  if(typeDos === "mecanique"){
       const lignes = lignesDocumentVersLignesMecanique();
       if(typeDoc === "facture"){
         if(!Array.isArray(d.lignesFactureMecanique)) d.lignesFactureMecanique = [];
@@ -3199,7 +3200,6 @@ function confirmerTransfertVersDossier(){
     document.getElementById("panneauTransfertDoc").style.display = "none";
     document.getElementById("infoTransfertDossier").textContent = "";
     toast(`${typeDoc==="facture"?"Facture":"Devis"} transféré vers ${d.numero} ✓`);
-  });
 }
 
 // Mettre à jour l'info quand on change la sélection
@@ -3730,13 +3730,12 @@ function changerStatutMecanique(index, statut){
 ===================================== */
 
 function supprimerDossierMecanique(index){
-  confirmerAction("Supprimer définitivement ce dossier mécanique ?", ()=>{
-    dossiersMecanique.splice(index, 1);
-    saveData();
-    renderDossiersMecanique();
-    majCompteursMecanique();
-    toast("Dossier supprimé");
-  });
+  if(!window.confirm("Supprimer définitivement ce dossier mécanique ?\nCette action est irréversible.")) return;
+  dossiersMecanique.splice(index, 1);
+  saveData();
+  renderDossiersMecanique();
+  majCompteursMecanique();
+  toast("Dossier supprimé");
 }
 
 /* =====================================
@@ -5141,11 +5140,10 @@ function enregistrerHistoriqueRelance(index, message){
 function toutMarquerRelance(){
   const liste = _getDossiersARelancer();
   if(!liste.length){ toast("Aucune relance à effectuer","error"); return; }
-  confirmerAction(`Marquer ${liste.length} dossier${liste.length>1?"s":""} comme relancé${liste.length>1?"s":""}  aujourd'hui ?`, ()=>{
-    liste.forEach(d=>{
+  if(!window.confirm(`Marquer ${liste.length} dossier${liste.length>1?"s":""} comme relancé${liste.length>1?"s":""}  aujourd'hui ?`)) return;
+  liste.forEach(d=>{
       d.derniereRelance = new Date().toISOString();
       d.nbRelances = (d.nbRelances||0)+1;
-    });
     saveData();
     renderRelancesAssurance();
     toast(`${liste.length} relance${liste.length>1?"s":""} enregistrée${liste.length>1?"s":""} ✓`);
@@ -5501,7 +5499,13 @@ function initModeHorsLigne(){
 
 async function initConnexionGoogle(){
   try {
+    // Vérifier que Firebase est initialisé avant de charger Auth
+    if(typeof firebase === "undefined" || !firebase.apps?.length){
+      console.warn("Google Auth non disponible: Firebase non initialisé");
+      return;
+    }
     await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js");
+    if(typeof firebase === "undefined") return;
     const auth = firebase.auth();
     // Vérifier si déjà connecté via Google
     auth.onAuthStateChanged(user=>{
@@ -5527,6 +5531,10 @@ async function initConnexionGoogle(){
 
 async function seConnecterAvecGoogle(){
   try {
+    if(typeof firebase === "undefined" || !firebase.apps?.length){
+      toast("Firebase non connecté — connexion Google indisponible","error");
+      return;
+    }
     await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js");
     const auth = firebase.auth();
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -5582,13 +5590,12 @@ function verifierNotifStatut(){
   if(!email && !tel) return;
   // Proposer d'envoyer une notification
   if(email){
-    confirmerAction(`Envoyer un email de notification à ${client} (${email}) pour l'informer que son véhicule est prêt ?`, ()=>{
-      const ent = entreprise || {};
+    if(!window.confirm(`Envoyer un email de notification à ${client} (${email}) pour l'informer que son véhicule est prêt ?`)) return;
+  const ent = entreprise || {};
       const sujet = encodeURIComponent(`Votre véhicule est prêt — ${ent.nom||"DA-Gestion"}`);
       const corps = encodeURIComponent(`Bonjour ${client},\n\nNous avons le plaisir de vous informer que votre véhicule est prêt et disponible à la récupération.\n\nN'hésitez pas à nous contacter pour tout renseignement.\n\nCordialement,\n${ent.nom||"DA-Gestion"}\n${ent.telephone||""}`);
       window.open(`mailto:${email}?subject=${sujet}&body=${corps}`);
       toast("Email de notification ouvert ✓");
-    });
   }
 }
 
@@ -5741,8 +5748,8 @@ function archiverAnciensDossiers(){
     return dt < limite;
   });
   if(!aArchiver.length){ toast("Aucun dossier à archiver (facturés de plus d'1 an)"); return; }
-  confirmerAction(`Archiver ${aArchiver.length} dossier${aArchiver.length>1?"s":""} facturés de plus d'un an ? Ils seront masqués mais conservés.`, ()=>{
-    aArchiver.forEach(d=>{ d.archive = true; });
+  if(!window.confirm(`Archiver ${aArchiver.length} dossier${aArchiver.length>1?"s":""} facturés de plus d'un an ? Ils seront masqués mais conservés.`)) return;
+  aArchiver.forEach(d=>{ d.archive = true;
     saveData();
     renderDossiers();
     majDashboard();
@@ -5819,8 +5826,8 @@ function calcAcompte(total){
 function creerAvoir(indexDoc){
   const doc = documents[indexDoc];
   if(!doc){ toast("Document introuvable","error"); return; }
-  confirmerAction(`Créer un avoir (note de crédit) pour ${doc.id} — ${doc.totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} € ?`, ()=>{
-    const avoir = {
+  if(!window.confirm(`Créer un avoir (note de crédit) pour ${doc.id} — ${doc.totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} € ?`)) return;
+  const avoir = {
       id: "AV-"+doc.id,
       type: "avoir",
       titre: "Avoir sur "+doc.id,
@@ -5837,7 +5844,6 @@ function creerAvoir(indexDoc){
     localStorage.setItem("documents", JSON.stringify(documents));
     renderDocuments();
     toast("Avoir créé : "+avoir.id+" ✓");
-  });
 }
 
 /* ─── RAPPORT MENSUEL dans le menu ─── */
@@ -6054,12 +6060,11 @@ function ouvrirAjoutPiece(index){
 function editerPiece(index){ ouvrirAjoutPiece(index); }
 
 function supprimerPiece(index){
-  confirmerAction(`Supprimer "${stockPieces[index]?.designation}" du stock ?`, ()=>{
-    stockPieces.splice(index,1);
+  if(!window.confirm(`Supprimer "${stockPieces[index]?.designation}" du stock ?`)) return;
+  stockPieces.splice(index,1);
     saveStock();
     renderStock();
     toast("Pièce supprimée");
-  });
 }
 
 function exporterStockCSV(){
@@ -6293,12 +6298,11 @@ function ouvrirAjoutTache(techPrefill, datePrefill){
 }
 
 function supprimerTache(index){
-  confirmerAction(`Supprimer la tâche "${tachesPlanning[index]?.titre}" ?`, ()=>{
-    tachesPlanning.splice(index,1);
+  if(!window.confirm(`Supprimer la tâche "${tachesPlanning[index]?.titre}" ?`)) return;
+  tachesPlanning.splice(index,1);
     savePlanning();
     renderPlanning();
     toast("Tâche supprimée");
-  });
 }
 
 
@@ -6445,12 +6449,11 @@ function ouvrirAjoutTarif(index){
 function editerTarif(idx){ ouvrirAjoutTarif(idx); }
 
 function supprimerTarif(idx){
-  confirmerAction(`Supprimer le tarif "${catalogueTarifs[idx]?.designation}" ?`, ()=>{
-    catalogueTarifs.splice(idx,1);
+  if(!window.confirm(`Supprimer le tarif "${catalogueTarifs[idx]?.designation}" ?`)) return;
+  catalogueTarifs.splice(idx,1);
     saveCatalogue();
     renderCatalogue();
     toast("Tarif supprimé");
-  });
 }
 
 /* ── 2. CALCULATEUR DE DEVIS RAPIDE ── */
@@ -6706,12 +6709,11 @@ function ouvrirAjoutCommande(index){
 function editerCommande(idx){ ouvrirAjoutCommande(idx); }
 
 function supprimerCommande(idx){
-  confirmerAction(`Supprimer la commande CMD-${String(commandesFournisseurs[idx]?.numero||"").padStart(4,"0")} ?`, ()=>{
-    commandesFournisseurs.splice(idx,1);
+  if(!window.confirm(`Supprimer la commande CMD-${String(commandesFournisseurs[idx]?.numero||"").padStart(4,"0")} ?`)) return;
+  commandesFournisseurs.splice(idx,1);
     saveCommandes();
     renderCommandes();
     toast("Commande supprimée");
-  });
 }
 
 function exporterCommandesCSV(){
@@ -9960,7 +9962,11 @@ function ouvrirRelancesImpayees(){
     const fac = parseFloat(d.facture||0);
     return fac > 0 && enc < fac;
   });
-  const toutes = [...impayees.map(d=>({...d,_type:"vitrage"})), ...mecaImpayees.map(d=>({...d,_type:"mecanique"}))];
+  // Conserver l'index original AVANT de copier les objets
+  const toutes = [
+    ...impayees.map(d=>({...d,_type:"vitrage",   _origIndex:dossiers.indexOf(d)})),
+    ...mecaImpayees.map(d=>({...d,_type:"mecanique", _origIndex:dossiersMecanique.indexOf(d)}))
+  ];
   const fmtE = v => Number(v||0).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €";
 
   ouvrirModal("📨 Relances impayées",
@@ -9992,7 +9998,7 @@ function ouvrirRelancesImpayees(){
                   <button onclick="envoyerSmsRelance('${d.telephone}','${d.client}','${fmtE(solde)}')" style="background:#16a34a;font-size:12px;">📱 SMS relance</button>
                   <button onclick="window.open('tel:${d.telephone}')" style="background:#0891b2;font-size:12px;">📞 Appeler</button>`:""}
                 ${d.email?`<button onclick="window.open('mailto:${d.email}?subject=Relance+facture&body=Bonjour+${encodeURIComponent(d.client)}%2C+votre+facture+N%C2%B0${d.numero}+de+${encodeURIComponent(fmtE(solde))}+reste+impay%C3%A9e.')" style="background:#334155;font-size:12px;">✉️ Email</button>`:""}
-                <button onclick="fermerModal();ouvrirFinancierDossier(${dossiers.indexOf(d)});return false;" style="background:#7c3aed;font-size:12px;" ${d._type!=="vitrage"?"disabled":""}>💰 Encaisser</button>
+                <button onclick="fermerModal();${d._type==='vitrage'?`ouvrirFinancierDossier(${d._origIndex})`:`ouvrirFinancierMecanique(${d._origIndex})`};return false;" style="background:#7c3aed;font-size:12px;">💰 Encaisser</button>
               </div>
             </div>`;
           }).join("")}
