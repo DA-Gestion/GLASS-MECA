@@ -158,6 +158,7 @@ async function tentativeConnexion(){
     document.getElementById("appContainer").style.display = "";
     afficherUtilisateurConnecte(user);
     initialiserApplication();
+    setTimeout(appliquerRestrictionsMenu, 500);
   } else {
     document.getElementById("loginErreur").textContent = "❌ Identifiant ou mot de passe incorrect";
     document.getElementById("passInput").value = "";
@@ -190,12 +191,13 @@ function ouvrirGestionUtilisateurs(){
       <h2>👥 Gestion des utilisateurs</h2>
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Accès</th><th>Actions</th></tr></thead>
           <tbody>
             ${users.map((u,i) => `<tr>
               <td>${escHtml(u.login)}</td>
               <td>${escHtml(u.nom)}</td>
               <td>${u.role === "admin" ? "🔑 Admin" : "👤 Utilisateur"}</td>
+              <td>${u.acces==="vitrage"?"🪟 Vitrage":u.acces==="mecanique"?"🔩 Mécanique":"🔓 Complet"}</td>
               <td>
                 ${i > 0 ? `<button class="delete-btn" onclick="supprimerUtilisateur(${i})">🗑 Supprimer</button>` : "<span style='color:#64748b;font-size:12px;'>Compte principal</span>"}
               </td>
@@ -211,6 +213,11 @@ function ouvrirGestionUtilisateurs(){
         <select id="newRole">
           <option value="utilisateur">👤 Utilisateur</option>
           <option value="admin">🔑 Administrateur</option>
+        </select>
+        <select id="newAcces">
+          <option value="tous">🔓 Accès complet</option>
+          <option value="vitrage">🪟 Vitrage uniquement</option>
+          <option value="mecanique">🔩 Mécanique uniquement</option>
         </select>
         <button onclick="ajouterUtilisateur()">➕ Ajouter</button>
         <button onclick="document.getElementById('gestionUsers').remove()">✖ Fermer</button>
@@ -234,7 +241,14 @@ function renderAdministration(){
       <td>${escHtml(u.nom)}</td>
       <td>${u.role === "admin" ? "🔑 Administrateur" : "👤 Utilisateur"}</td>
       <td>
-        <input type="password" id="editPass_${i}" placeholder="Nouveau mot de passe" style="width:170px;padding:5px 8px;font-size:12px;">
+        <select onchange="changerAccesUtilisateur(${i},this.value)" style="font-size:12px;padding:4px 6px;background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;">
+          <option value="tous"      ${(!u.acces||u.acces==="tous")?"selected":""}>🔓 Complet</option>
+          <option value="vitrage"   ${u.acces==="vitrage"?"selected":""}>🪟 Vitrage</option>
+          <option value="mecanique" ${u.acces==="mecanique"?"selected":""}>🔩 Mécanique</option>
+        </select>
+      </td>
+      <td>
+        <input type="password" id="editPass_${i}" placeholder="Nouveau mot de passe" style="width:140px;padding:5px 8px;font-size:12px;">
         <button onclick="changerPassUtilisateur(${i})" style="padding:5px 8px;font-size:12px;">💾</button>
       </td>
       <td>
@@ -253,7 +267,8 @@ function ajouterUtilisateur(){
   if(!login || !nom || !pass){ toast("Tous les champs sont obligatoires", "error"); return; }
   const users = getUtilisateurs();
   if(users.some(u => u.login === login)){ toast("Cet identifiant existe déjà", "error"); return; }
-  users.push({ login, motDePasseHash: hashPassword(pass), nom, role });
+  const acces = document.getElementById("newAcces")?.value || "tous";
+  users.push({ login, motDePasseHash: hashPassword(pass), nom, role, acces });
   saveUtilisateurs(users);
   ["newLogin","newNom","newPass"].forEach(id => { const el=document.getElementById(id); if(el) el.value=""; });
   toast("Utilisateur ajouté ✓");
@@ -10805,3 +10820,73 @@ function genererLettreRelance(type, index){
   d.dernièreRelance = now.toISOString().split("T")[0];
   saveData();
 }
+
+/* =====================================================================
+   GESTION DES ACCÈS UTILISATEUR — Vitrage / Mécanique / Complet
+===================================================================== */
+
+function changerAccesUtilisateur(index, acces){
+  const users = getUtilisateurs();
+  if(!users[index]) return;
+  users[index].acces = acces;
+  saveUtilisateurs(users);
+  toast(`Accès mis à jour : ${acces === "vitrage" ? "🪟 Vitrage" : acces === "mecanique" ? "🔩 Mécanique" : "🔓 Complet"}`);
+}
+
+/* Vérifie si l'utilisateur connecté a accès à un module */
+function verifierAcces(module){
+  const session = getSessionUtilisateur();
+  if(!session) return false;
+  // Admin = accès complet toujours
+  if(session.role === "admin") return true;
+  const acces = session.acces || "tous";
+  if(acces === "tous") return true;
+  if(acces === "vitrage"   && module === "vitrage")   return true;
+  if(acces === "mecanique" && module === "mecanique") return true;
+  return false;
+}
+
+/* Bloquer l'accès aux pages interdites */
+function verifierAccesPage(pageId){
+  const session = getSessionUtilisateur();
+  if(!session) return true; // pas connecté = géré ailleurs
+  if(session.role === "admin") return true;
+  const acces = session.acces || "tous";
+  if(acces === "tous") return true;
+
+  // Pages bloquées selon l'accès
+  const pagesVitrage   = ["dossiers","assurances","relancesAssurance"];
+  const pagesMecanique = ["mecanique"];
+  const pagesCommunes  = ["dashboard","clients","vehicules","rendezVous","documents","stockPieces","administration","entreprise","statistiques"];
+
+  if(acces === "vitrage"   && pagesMecanique.includes(pageId)){
+    toast("⛔ Accès refusé — Module mécanique non autorisé", "error");
+    return false;
+  }
+  if(acces === "mecanique" && pagesVitrage.includes(pageId)){
+    toast("⛔ Accès refusé — Module vitrage non autorisé", "error");
+    return false;
+  }
+  return true;
+}
+
+/* Masquer les éléments de menu non autorisés selon l'accès */
+function appliquerRestrictionsMenu(){
+  const session = getSessionUtilisateur();
+  if(!session) return;
+  if(session.role === "admin") return;
+  const acces = session.acces || "tous";
+  if(acces === "tous") return;
+
+  // IDs des liens de menu à masquer
+  const menuVitrage   = ["menuVitrage","menuAssurances","menuRelances","menuRelancesImpayees"];
+  const menuMecanique = ["menuMecanique"];
+
+  if(acces === "vitrage"){
+    menuMecanique.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display="none"; });
+  }
+  if(acces === "mecanique"){
+    menuVitrage.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display="none"; });
+  }
+}
+
