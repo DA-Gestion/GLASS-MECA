@@ -7,6 +7,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DA-Gestion</title>
 <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --color-primary: #38bdf8;
+      --color-accent:  #c9a86c;
+      --color-success: #34d399;
+      --color-danger:  #f87171;
+      --color-purple:  #a78bfa;
+      --color-card:    #1e293b;
+    }
+  </style>
 </head>
 
 <body>
@@ -75,6 +85,7 @@
       <!-- ── PARAMÈTRES ── -->
       <div class="nav-section-label">⚙ PARAMÈTRES</div>
       <a href="#" onclick="ouvrirGestionCompte();return false;">⚙️ Mon compte garage</a>
+      <a href="#" onclick="ouvrirPersonnalisationCouleurs();return false;">🎨 Couleurs interface</a>
       <a href="#" onclick="showPage('entreprise');setActive(this)">🏢 Mon entreprise</a>
       <a href="#" id="btnTheme" onclick="toggleTheme();return false;">☀️ Mode clair</a>
       <a href="#" onclick="exporterExcelGlobal();return false;">📊 Export Excel</a>
@@ -119,6 +130,7 @@
 
     <!-- DASHBOARD -->
     <section id="dashboard" class="page">
+      <div id="objectifCAWidget" style="margin-bottom:16px;"></div>
 
       <div style="background:#070c14;border-radius:16px;padding:32px 24px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:32px;margin-bottom:24px;border:1px solid #1e293b;">
 

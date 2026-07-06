@@ -853,6 +853,7 @@ function majDashboard(){
   if(typeof dossiersMecanique !== "undefined"){
     dossiersMecanique.forEach(d => { recalculerTotauxMecanique(d); totalCA += Number(d.facture || d.devis || 0); });
   }
+  renderObjectifCA();
 
   const set = (id, val) => {
     const el = document.getElementById(id);
@@ -863,6 +864,7 @@ function majDashboard(){
   set("totalClients",  clients.length);
   set("totalVehicules",vehicules.length);
   set("caMois", totalCA.toLocaleString("fr-FR") + " €");
+  setTimeout(renderObjectifCA, 100);
 
   majCompteursDossiers();
   renderStatistiques();
@@ -1842,6 +1844,7 @@ function ouvrirDossier(index){
       <br>
       <button onclick="ouvrirFinancierDossier(${index})" style="background:#16a34a;font-size:14px;padding:10px 18px;">💰 Devis / Facture / Encaissement</button>
       <button onclick="imprimerDossier()" style="background:#0891b2;">🖨 Fiche dossier</button>
+      <button onclick="imprimerEtiquetteVehicule(${index},'vitrage')" style="background:#0891b2;font-size:12px;">🏷 Étiquette</button>
       <button onclick="afficherNoteDossier(${index})" style="background:#334155;">📝 Notes</button>
       <button onclick="ajouterPhotoDossier(${index})" style="background:#334155;">📷 Photos</button>
       <button onclick="genererDeclaration(${index})">📋 Déclaration</button>
@@ -3917,6 +3920,8 @@ function ouvrirDossierMecanique(index){
         <button onclick="afficherNoteDossierMecanique(${index})" style="background:#334155;">📝 Notes</button>
         <button onclick="ajouterReparationOrdre(${index})" class="btn-success">➕ Réparation</button>
         <button onclick="imprimerOrdreMission(${index})" style="background:#7c3aed;">🖨 Ordre réparation</button>
+        <button onclick="genererFactureDepuisOR(${index})" style="background:#16a34a;font-size:12px;">📄 OR → Facture</button>
+        <button onclick="imprimerEtiquetteVehicule(${index},'mecanique')" style="background:#0891b2;font-size:12px;">🏷 Étiquette</button>
         <button onclick="envoyerSmsVehiculeTermine(${index})" style="background:#0891b2;">📱 SMS</button>
         <button onclick="document.getElementById('detailMecanique').innerHTML=''" style="background:#334155;">✖ Fermer</button>
         <button class="delete-btn" onclick="supprimerDossierMecanique(${index})">🗑 Supprimer</button>
@@ -8021,6 +8026,8 @@ function genererRapportFacturation(){
   pdf.text(`SIRET : ${(entreprise.siret||"Non renseigné")} — TVA : ${entreprise.tva||"Non renseigné"}`, 14, y); y+=4;
   if(entreprise.penalites) pdf.text(`Pénalités de retard : ${entreprise.penalites}`, 14, y); y+=4;
   if(entreprise.cgu) pdf.text(`Conditions de règlement : ${entreprise.cgu}`, 14, y);
+  y += 4;
+  if(entreprise.siret) pdf.text(`SIRET : ${entreprise.siret}${entreprise.tva?" — TVA : "+entreprise.tva:""}`, 14, y);
 
   pdf.save(`Rapport-Facturation-${now.toISOString().split("T")[0]}.pdf`);
   toast("Rapport de facturation PDF généré ✓");
@@ -8916,6 +8923,26 @@ function imprimerAvoir(index, typeDossier){
   if(e.siret) { pdf.text("SIRET : "+e.siret+(e.tva?" — TVA : "+e.tva:""), 14, my); my+=4; }
   pdf.text("Document comptable — Avoir non remboursable sauf mention contraire.", 14, my);
 
+  // CGV / mentions légales
+  y += 10;
+  pdf.setDrawColor(200); pdf.line(14, y, 196, y); y += 6;
+  pdf.setFontSize(7); pdf.setTextColor(100,100,100); pdf.setFont(undefined,"normal");
+  if(e.cgu)       { pdf.text("Conditions de règlement : " + e.cgu, 14, y); y += 4; }
+  if(e.penalites) { pdf.text("Pénalités de retard : " + e.penalites, 14, y); y += 4; }
+  if(e.siret)     { pdf.text("SIRET : " + e.siret + (e.tva ? " — N° TVA : " + e.tva : ""), 14, y); }
+
+  // CGV
+  y += 10;
+  pdf.setFontSize(7); pdf.setTextColor(100,100,100); pdf.setFont(undefined,"normal");
+  if(e.cgu)       { pdf.text("Conditions de règlement : " + e.cgu, 14, y); y += 4; }
+  if(e.penalites) { pdf.text("Pénalités de retard : " + e.penalites, 14, y); }
+  // CGV
+  if(e.cgu || e.penalites){
+    y += 8;
+    pdf.setFontSize(7); pdf.setTextColor(100,100,100); pdf.setFont(undefined,"normal");
+    if(e.cgu)       { pdf.text("Conditions de règlement : " + e.cgu, 14, y); y += 4; }
+    if(e.penalites) { pdf.text("Pénalités de retard : " + e.penalites, 14, y); }
+  }
   pdf.save(`Avoir-${num}.pdf`);
   toast("PDF avoir généré ✓");
 }
@@ -10281,3 +10308,297 @@ function encaisserDepuisRelance(type, index){
     }
   }, 200);
 }
+
+/* =====================================================================
+   POINT 2 : OBJECTIF MENSUEL CA + JAUGE DE PROGRESSION
+===================================================================== */
+
+function renderObjectifCA(){
+  const el = document.getElementById("objectifCAWidget");
+  if(!el) return;
+
+  const now = new Date();
+  const moisCourant = now.getMonth();
+  const anneeCourante = now.getFullYear();
+
+  // CA mois courant (vitrage + mécanique)
+  const caMoisVit = dossiers.filter(d=>{
+    const dt = new Date(d.dateCreation||d.date||"");
+    return dt.getMonth()===moisCourant && dt.getFullYear()===anneeCourante;
+  }).reduce((a,d)=>a+Number(d.facture||0),0);
+
+  const caMoisMec = (typeof dossiersMecanique!=="undefined"?dossiersMecanique:[]).filter(d=>{
+    const dt = new Date(d.dateCreation||d.date||"");
+    return dt.getMonth()===moisCourant && dt.getFullYear()===anneeCourante;
+  }).reduce((a,d)=>a+Number(d.facture||d.devis||0),0);
+
+  const caTotal = caMoisVit + caMoisMec;
+  const objectif = parseFloat(localStorage.getItem("objectifCAMensuel")||"5000");
+  const pct = objectif > 0 ? Math.min(100, Math.round(caTotal/objectif*100)) : 0;
+  const moisLabel = now.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  const couleur = pct >= 100 ? "#34d399" : pct >= 70 ? "#f59e0b" : "#38bdf8";
+  const fmtE = v => Number(v).toLocaleString("fr-FR",{minimumFractionDigits:0})+" €";
+
+  el.innerHTML = `
+    <div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Objectif ${moisLabel}</div>
+          <div style="font-size:22px;font-weight:900;color:${couleur};">${fmtE(caTotal)}<span style="font-size:13px;color:#64748b;font-weight:400;"> / ${fmtE(objectif)}</span></div>
+        </div>
+        <div style="font-size:28px;font-weight:900;color:${couleur};">${pct}%</div>
+      </div>
+      <!-- Barre de progression -->
+      <div style="background:#0f172a;border-radius:99px;height:12px;overflow:hidden;margin-bottom:10px;">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${couleur},${couleur}cc);border-radius:99px;transition:width .5s;"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="inputObjectifCA" value="${objectif}" min="0" step="500"
+          style="width:120px;padding:6px 10px;font-size:13px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#f1f5f9;"
+          placeholder="Objectif €">
+        <button onclick="sauvegarderObjectifCA()" style="padding:6px 14px;font-size:12px;background:#38bdf8;color:#000;">💾 Définir</button>
+        ${pct>=100?'<span style="color:#34d399;font-size:13px;font-weight:700;">🎉 Objectif atteint !</span>':''}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;color:#64748b;">
+        <span>🪟 Vitrage : ${fmtE(caMoisVit)}</span>
+        <span>🔩 Méca : ${fmtE(caMoisMec)}</span>
+        <span>Reste : ${fmtE(Math.max(0,objectif-caTotal))}</span>
+      </div>
+    </div>`;
+}
+
+function sauvegarderObjectifCA(){
+  const val = parseFloat(document.getElementById("inputObjectifCA")?.value||"0");
+  if(isNaN(val)||val<0){ toast("Montant invalide","error"); return; }
+  localStorage.setItem("objectifCAMensuel", String(val));
+  renderObjectifCA();
+  toast("Objectif mensuel enregistré ✓");
+}
+
+/* =====================================================================
+   POINT 3 : OR → FACTURE AUTOMATIQUE
+===================================================================== */
+
+function genererFactureDepuisOR(index){
+  const d = dossiersMecanique[index];
+  if(!d){ toast("Dossier introuvable","error"); return; }
+  if(!d.ordreReparationNumero){ toast("Ce dossier n'a pas d'ordre de réparation","error"); return; }
+
+  const reparations = d.reparations||[];
+  const lignes      = d.lignesFacture||[];
+  if(reparations.length===0 && lignes.length===0){
+    toast("L'ordre de réparation est vide","error"); return;
+  }
+
+  recalculerTotauxMecanique(d);
+  const totalOR = d.totalTTC || 0;
+  if(totalOR<=0){ toast("Montant OR nul — vérifiez les réparations","error"); return; }
+
+  if(!window.confirm(
+    `Générer la facture depuis l'OR N°${d.ordreReparationNumero} ?\n\nMontant : ${totalOR.toLocaleString("fr-FR",{minimumFractionDigits:2})} €\n\nLe numéro de facture sera assigné automatiquement.`
+  )) return;
+
+  // Générer numéro de facture
+  const numFac = getProchainNumeroDocument("FAC");
+  d.numeroFacture = numFac;
+  d.facture       = totalOR;
+  d.statut        = "Facturé";
+  d.dateFacture   = new Date().toISOString().split("T")[0];
+
+  saveData();
+  renderDossiersMecanique();
+  toast(`✅ Facture ${numFac} générée — ${totalOR.toLocaleString("fr-FR",{minimumFractionDigits:2})} €`);
+
+  // Proposer d'imprimer
+  setTimeout(()=>{
+    if(window.confirm(`Facture ${numFac} créée !\nImprimer maintenant ?`)){
+      imprimerFinancierFast(index, "mecanique", "facture");
+    }
+  }, 500);
+}
+
+/* =====================================================================
+   POINT 4 : PERSONNALISATION DES COULEURS INTERFACE
+===================================================================== */
+
+const COULEURS_DEFAUT = {
+  primary:  "#38bdf8",
+  accent:   "#c9a86c",
+  success:  "#34d399",
+  danger:   "#f87171",
+  purple:   "#a78bfa",
+  bg:       "#070c14",
+  card:     "#1e293b",
+};
+
+function ouvrirPersonnalisationCouleurs(){
+  const saved = JSON.parse(localStorage.getItem("couleursInterface")||"{}");
+  const c = {...COULEURS_DEFAUT, ...saved};
+
+  ouvrirModal("🎨 Personnalisation des couleurs",
+    `<div style="display:flex;flex-direction:column;gap:14px;">
+      <p style="font-size:12px;color:#64748b;">Personnalisez les couleurs de l'interface. Les changements s'appliquent immédiatement.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        ${[
+          {id:"primary", label:"Couleur principale (bleu)"},
+          {id:"accent",  label:"Accent (or)"},
+          {id:"success", label:"Succès (vert)"},
+          {id:"danger",  label:"Danger (rouge)"},
+          {id:"purple",  label:"Secondaire (violet)"},
+          {id:"card",    label:"Fond des cartes"},
+        ].map(item=>`
+          <div style="display:flex;align-items:center;gap:10px;background:#0f172a;border-radius:8px;padding:10px;">
+            <input type="color" id="couleur_${item.id}" value="${c[item.id]}"
+              onchange="previewCouleur('${item.id}',this.value)"
+              style="width:40px;height:32px;border:none;cursor:pointer;background:none;border-radius:6px;">
+            <span style="font-size:12px;color:#94a3b8;">${item.label}</span>
+          </div>`).join("")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="appliquerCouleurs()" style="background:#34d399;color:#000;">✅ Appliquer</button>
+        <button onclick="reinitialiserCouleurs()" style="background:#334155;">↺ Réinitialiser</button>
+      </div>
+    </div>`,
+    () => appliquerCouleurs()
+  );
+}
+
+function previewCouleur(id, val){
+  const cssVar = {
+    primary: "--color-primary",
+    accent:  "--color-accent",
+    success: "--color-success",
+    danger:  "--color-danger",
+    purple:  "--color-purple",
+    card:    "--color-card",
+  };
+  if(cssVar[id]) document.documentElement.style.setProperty(cssVar[id], val);
+}
+
+function appliquerCouleurs(){
+  const ids = ["primary","accent","success","danger","purple","card"];
+  const saved = {};
+  ids.forEach(id=>{
+    const el = document.getElementById("couleur_"+id);
+    if(el){
+      saved[id] = el.value;
+      previewCouleur(id, el.value);
+    }
+  });
+  localStorage.setItem("couleursInterface", JSON.stringify(saved));
+  toast("Couleurs appliquées ✓");
+  fermerModal();
+}
+
+function reinitialiserCouleurs(){
+  Object.entries(COULEURS_DEFAUT).forEach(([id,val])=>{ previewCouleur(id,val); });
+  localStorage.removeItem("couleursInterface");
+  toast("Couleurs réinitialisées ✓");
+  fermerModal();
+}
+
+function chargerCouleursSauvegardees(){
+  const saved = JSON.parse(localStorage.getItem("couleursInterface")||"{}");
+  Object.entries(saved).forEach(([id,val])=>{ previewCouleur(id,val); });
+}
+
+// Charger au démarrage
+document.addEventListener("DOMContentLoaded", ()=>{ setTimeout(chargerCouleursSauvegardees, 100); });
+
+/* =====================================================================
+   POINT 5 : IMPRESSION ÉTIQUETTES VÉHICULE
+===================================================================== */
+
+function imprimerEtiquetteVehicule(index, type){
+  const d = type==="mecanique" ? dossiersMecanique[index] : dossiers[index];
+  if(!d){ toast("Dossier introuvable","error"); return; }
+
+  const e = entreprise;
+  const qr = `N°${d.numero} | ${d.client} | ${d.immat||""} | ${d.vehicule||""}`;
+
+  const fenetre = window.open("","","width=500,height=700");
+  fenetre.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+  <title>Étiquettes — ${d.numero}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,sans-serif;background:#fff;padding:20px;}
+    .page{display:flex;flex-direction:column;gap:16px;}
+    .etiquette{
+      width:85mm;border:2px solid #000;border-radius:6px;padding:10px;
+      page-break-inside:avoid;position:relative;
+    }
+    .etiquette-header{background:#0f172a;color:#fff;margin:-10px -10px 8px;padding:8px 10px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center;}
+    .etiquette-num{font-size:18px;font-weight:900;color:#38bdf8;}
+    .etiquette-type{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;}
+    .etiquette-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px dotted #e5e7eb;}
+    .etiquette-row:last-child{border:none;}
+    .etiquette-label{color:#666;font-size:10px;}
+    .etiquette-val{font-weight:bold;color:#111;text-align:right;max-width:55%;}
+    .etiquette-immat{font-size:16px;font-weight:900;letter-spacing:2px;text-align:center;background:#f0f4f8;padding:4px;border-radius:4px;margin:6px 0;border:2px solid #000;}
+    .garage{font-size:9px;color:#888;text-align:center;margin-top:6px;padding-top:6px;border-top:1px solid #eee;}
+    @media print{
+      body{padding:0;}
+      button{display:none;}
+      .etiquette{break-inside:avoid;}
+    }
+  </style>
+  </head><body>
+  <div style="text-align:center;margin-bottom:16px;">
+    <button onclick="window.print()" style="background:#000;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-right:8px;">🖨 Imprimer</button>
+    <button onclick="window.close()" style="background:#334155;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-size:14px;cursor:pointer;">✕ Fermer</button>
+  </div>
+
+  <div class="page">
+
+    <!-- Étiquette PARE-BRISE / HABITACLE -->
+    <div class="etiquette">
+      <div class="etiquette-header">
+        <div>
+          <div class="etiquette-num">N° ${d.numero}</div>
+          <div class="etiquette-type">${type==="mecanique"?"🔩 Mécanique":"🪟 Vitrage"}</div>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;">${new Date().toLocaleDateString("fr-FR")}</div>
+      </div>
+      ${d.immat?`<div class="etiquette-immat">🚘 ${d.immat}</div>`:""}
+      <div class="etiquette-row">
+        <span class="etiquette-label">Client</span>
+        <span class="etiquette-val">${d.client||"—"}</span>
+      </div>
+      <div class="etiquette-row">
+        <span class="etiquette-label">Véhicule</span>
+        <span class="etiquette-val">${d.vehicule||d.marque||"—"}${d.modele?" "+d.modele:""}</span>
+      </div>
+      ${type!=="mecanique"&&d.vitrage?`<div class="etiquette-row">
+        <span class="etiquette-label">Vitrage</span>
+        <span class="etiquette-val">${d.vitrage}</span>
+      </div>`:""}
+      ${type==="mecanique"&&d.ordreReparationNumero?`<div class="etiquette-row">
+        <span class="etiquette-label">OR</span>
+        <span class="etiquette-val">${d.ordreReparationNumero}</span>
+      </div>`:""}
+      <div class="etiquette-row">
+        <span class="etiquette-label">Statut</span>
+        <span class="etiquette-val">${d.statut||"En cours"}</span>
+      </div>
+      ${d.technicien?`<div class="etiquette-row">
+        <span class="etiquette-label">Technicien</span>
+        <span class="etiquette-val">${d.technicien}</span>
+      </div>`:""}
+      <div class="garage">${e.nom||"Garage GlassMéca"} · ${e.telephone||""}</div>
+    </div>
+
+    <!-- Étiquette CLÉ -->
+    <div class="etiquette" style="width:55mm;border-style:dashed;">
+      <div style="text-align:center;">
+        <div style="font-size:22px;font-weight:900;color:#000;">N° ${d.numero}</div>
+        ${d.immat?`<div style="font-size:14px;font-weight:bold;letter-spacing:2px;margin:4px 0;">${d.immat}</div>`:""}
+        <div style="font-size:11px;color:#555;">${d.client||""}</div>
+        <div style="font-size:10px;color:#888;">${e.nom||""} · ${new Date().toLocaleDateString("fr-FR")}</div>
+      </div>
+    </div>
+
+  </div>
+  </body></html>`);
+  fenetre.document.close();
+}
+
