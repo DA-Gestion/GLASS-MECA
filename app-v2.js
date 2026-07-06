@@ -32,9 +32,11 @@ function getUtilisateurs(){
 function saveUtilisateurs(users){
   _utilisateursCache = users;
   localStorage.setItem("utilisateurs", JSON.stringify(users));
-  // Sauvegarder aussi dans Firebase
+  // Sauvegarder dans Firebase sous /garages/{id}/utilisateurs
   if(db && _firebaseActif){
-    db.ref("/utilisateurs").set(users).catch(e => console.warn("Erreur save utilisateurs:", e));
+    const garageId = _getGarageId();
+    db.ref("/garages/" + garageId + "/utilisateurs").set(users)
+      .catch(e => console.warn("Erreur save utilisateurs:", e));
   }
 }
 
@@ -131,9 +133,25 @@ function afficherEcranLogin(){
   setTimeout(() => document.getElementById("loginInput")?.focus(), 100);
 }
 
-function tentativeConnexion(){
+async function tentativeConnexion(){
   const login = document.getElementById("loginInput")?.value || "";
   const pass  = document.getElementById("passInput")?.value  || "";
+
+  // Charger les utilisateurs depuis Firebase avant de vérifier (synchronisation multi-appareils)
+  if(db && _firebaseActif){
+    try {
+      const garageId = _getGarageId();
+      const snap = await db.ref("/garages/" + garageId + "/utilisateurs").get();
+      if(snap.exists()){
+        const fbUsers = _objVersTableau(snap.val());
+        if(fbUsers.length > 0){
+          _utilisateursCache = fbUsers;
+          localStorage.setItem("utilisateurs", JSON.stringify(fbUsers));
+        }
+      }
+    } catch(e){ console.warn("Impossible de charger les utilisateurs Firebase:", e); }
+  }
+
   const user  = connecterUtilisateur(login, pass);
   if(user){
     document.getElementById("loginScreen").style.display = "none";
@@ -383,6 +401,14 @@ async function chargerDepuisFirebase(){
     if(d.catalogueTarifs)       { catalogueTarifs       = _objVersTableau(d.catalogueTarifs);       localStorage.setItem("catalogueTarifs",       JSON.stringify(catalogueTarifs)); }
     if(d.commandesFournisseurs) { commandesFournisseurs = _objVersTableau(d.commandesFournisseurs); localStorage.setItem("commandesFournisseurs", JSON.stringify(commandesFournisseurs)); }
     if(d.tachesPlanning)        { tachesPlanning        = _objVersTableau(d.tachesPlanning);        localStorage.setItem("tachesPlanning",        JSON.stringify(tachesPlanning)); }
+    // ── Utilisateurs : charger depuis Firebase → synchronisé entre appareils ──
+    if(d.utilisateurs){
+      const fbUsers = _objVersTableau(d.utilisateurs);
+      if(fbUsers.length > 0){
+        _utilisateursCache = fbUsers;
+        localStorage.setItem("utilisateurs", JSON.stringify(fbUsers));
+      }
+    }
   } catch(e){
     console.warn("Erreur chargement Firebase :", e.message);
   }
