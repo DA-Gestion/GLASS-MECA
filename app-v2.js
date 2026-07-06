@@ -10084,6 +10084,7 @@ function ouvrirRelancesImpayees(){
                   <button onclick="window.open('tel:${d.telephone}')" style="background:#0891b2;font-size:12px;">📞 Appeler</button>`:""}
                 ${d.email?`<button onclick="window.open('mailto:${d.email}?subject=Relance+facture&body=Bonjour+${encodeURIComponent(d.client)}%2C+votre+facture+N%C2%B0${d.numero}+de+${encodeURIComponent(fmtE(solde))}+reste+impay%C3%A9e.')" style="background:#334155;font-size:12px;">✉️ Email</button>`:""}
                 <button onclick="encaisserDepuisRelance('${d._type}',${d._origIndex})" style="background:#7c3aed;font-size:12px;">💰 Encaisser</button>
+                <button onclick="genererLettreRelance('${d._type}',${d._origIndex})" style="background:#c9a86c;color:#000;font-size:12px;">📄 Lettre</button>
               </div>
             </div>`;
           }).join("")}
@@ -10602,3 +10603,179 @@ function imprimerEtiquetteVehicule(index, type){
   fenetre.document.close();
 }
 
+
+/* =====================================================================
+   LETTRE DE RELANCE PDF — Générée depuis les dossiers impayés
+   Reprend automatiquement les infos du client + du dossier
+===================================================================== */
+
+function genererLettreRelance(type, index){
+  const d = type === "mecanique" ? dossiersMecanique[index] : dossiers[index];
+  if(!d){ toast("Dossier introuvable","error"); return; }
+
+  const e   = entreprise;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+  const solde = Math.max(0, Number(d.facture||0) - Number(d.montantEncaisse||0));
+  const fmtE = v => Number(v||0).toLocaleString("fr-FR",{minimumFractionDigits:2}) + " €";
+
+  // Calculer les jours de retard
+  const dateDoc = d.dateFacture || d.date || d.dateCreation || "";
+  const joursRetard = dateDoc
+    ? Math.floor((Date.now() - new Date(dateDoc)) / 86400000)
+    : null;
+
+  // Numéro de relance (1ère, 2ème, 3ème)
+  const nbRelances = (d.nbRelances || 0) + 1;
+  const niveauRelance = nbRelances === 1 ? "PREMIÈRE" : nbRelances === 2 ? "DEUXIÈME" : "TROISIÈME ET DERNIÈRE";
+  const objetRelance  = nbRelances === 1
+    ? "Rappel de paiement — Facture N°" + d.numero
+    : nbRelances === 2
+    ? "Relance — Facture N°" + d.numero + " en souffrance"
+    : "Mise en demeure — Facture N°" + d.numero;
+
+  const fenetre = window.open("","","width=850,height=1100");
+  fenetre.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>Lettre de relance — ${d.numero}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:"Times New Roman",Georgia,serif;font-size:12pt;color:#111;background:#fff;padding:0;}
+  .page{max-width:210mm;margin:0 auto;padding:25mm 20mm 20mm;}
+  .entete{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12mm;}
+  .garage-bloc{font-size:10pt;line-height:1.7;}
+  .garage-nom{font-size:14pt;font-weight:bold;color:#111;margin-bottom:4px;}
+  .garage-siret{font-size:9pt;color:#555;margin-top:4px;}
+  .lieu-date{text-align:right;font-size:11pt;color:#333;margin-top:8mm;}
+  .client-bloc{margin-top:8mm;margin-left:auto;width:80mm;border:1px solid #ddd;padding:10px;background:#f9f9f9;font-size:11pt;line-height:1.8;}
+  .client-nom{font-weight:bold;font-size:12pt;}
+  .ref-line{margin:10mm 0 6mm;font-size:10pt;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;}
+  .objet{font-weight:bold;font-size:12pt;margin:6mm 0 8mm;}
+  .corps{font-size:11pt;line-height:1.9;text-align:justify;}
+  .corps p{margin-bottom:6mm;}
+  .montant-box{border:2px solid #111;border-radius:4px;padding:10px 16px;margin:8mm 0;display:flex;justify-content:space-between;align-items:center;background:#f9f9f9;}
+  .montant-label{font-size:11pt;color:#333;}
+  .montant-val{font-size:18pt;font-weight:bold;color:#111;}
+  .relance-badge{display:inline-block;border:1px solid #999;padding:3px 10px;font-size:9pt;color:#555;border-radius:3px;margin-bottom:6mm;letter-spacing:1px;text-transform:uppercase;}
+  .signature{margin-top:14mm;}
+  .signature-bloc{margin-top:6mm;}
+  .pied{margin-top:16mm;padding-top:6mm;border-top:1px solid #ccc;font-size:8pt;color:#888;text-align:center;line-height:1.7;}
+  .niveau-3{border-left:3px solid #dc2626;padding-left:8px;}
+  @media print{
+    body{padding:0;}
+    button{display:none!important;}
+    .page{padding:20mm 18mm 18mm;}
+  }
+</style>
+</head><body>
+<div class="page">
+
+  <!-- Boutons impression (masqués à l'impression) -->
+  <div style="text-align:center;margin-bottom:12px;font-family:Arial,sans-serif;">
+    <button onclick="window.print()" style="background:#111;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-right:8px;">🖨 Imprimer / PDF</button>
+    <button onclick="window.close()" style="background:#555;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-size:14px;cursor:pointer;">✕ Fermer</button>
+  </div>
+
+  <!-- En-tête -->
+  <div class="entete">
+    <div class="garage-bloc">
+      <div class="garage-nom">${e.nom || "Garage GlassMéca"}</div>
+      ${e.adresse ? `<div>${e.adresse}</div>` : ""}
+      ${e.telephone ? `<div>Tél : ${e.telephone}</div>` : ""}
+      ${e.email ? `<div>${e.email}</div>` : ""}
+      ${e.siret ? `<div class="garage-siret">SIRET : ${e.siret}${e.tva ? " — TVA : " + e.tva : ""}</div>` : ""}
+    </div>
+    <div>
+      <div class="lieu-date">Outreau, le ${dateStr}</div>
+    </div>
+  </div>
+
+  <!-- Destinataire -->
+  <div class="client-bloc">
+    <div class="client-nom">${d.client || "—"}</div>
+    ${d.adresse ? `<div>${d.adresse}</div>` : ""}
+    ${d.telephone ? `<div>Tél : ${d.telephone}</div>` : ""}
+    ${d.email ? `<div>${d.email}</div>` : ""}
+  </div>
+
+  <!-- Références -->
+  <div class="ref-line">
+    Dossier N° <strong>${d.numero}</strong>
+    ${d.immat ? " — Véhicule : <strong>" + d.immat + "</strong>" : ""}
+    ${d.vehicule ? " " + d.vehicule : ""}
+    ${joursRetard !== null ? " — Retard : <strong>" + joursRetard + " jours</strong>" : ""}
+  </div>
+
+  <!-- Objet -->
+  <div>
+    <span class="relance-badge">${niveauRelance} RELANCE</span>
+  </div>
+  <div class="objet ${nbRelances >= 3 ? "niveau-3" : ""}">Objet : ${objetRelance}</div>
+
+  <!-- Corps -->
+  <div class="corps">
+    <p>Madame, Monsieur <strong>${d.client || ""}</strong>,</p>
+
+    ${nbRelances === 1 ? `
+    <p>Sauf erreur ou omission de notre part, nous constatons que la facture N°&nbsp;<strong>${d.numero}</strong>${d.dateFacture ? " du " + new Date(d.dateFacture + "T00:00:00").toLocaleDateString("fr-FR") : ""} relative à <strong>${type === "vitrage" ? "la réparation de vitrage" : "la réparation mécanique"} de votre véhicule ${d.immat || d.vehicule || ""}</strong> n'a pas encore été réglée à ce jour.</p>
+    <p>Nous vous remercions de bien vouloir régulariser cette situation dans les meilleurs délais.</p>
+    ` : nbRelances === 2 ? `
+    <p>Malgré notre précédente relance, nous constatons que la facture N°&nbsp;<strong>${d.numero}</strong>${d.dateFacture ? " du " + new Date(d.dateFacture + "T00:00:00").toLocaleDateString("fr-FR") : ""} relative à <strong>${type === "vitrage" ? "la réparation de vitrage" : "la réparation mécanique"} de votre véhicule ${d.immat || d.vehicule || ""}</strong> demeure impayée à ce jour.</p>
+    <p>Nous vous demandons instamment de procéder au règlement de la somme due dans un délai de <strong>8 jours</strong> à compter de la réception de ce courrier.</p>
+    ` : `
+    <p>En l'absence de règlement suite à nos précédentes relances, nous vous mettons en demeure de régler, sous <strong>8 jours</strong>, la somme correspondant à la facture N°&nbsp;<strong>${d.numero}</strong>${d.dateFacture ? " du " + new Date(d.dateFacture + "T00:00:00").toLocaleDateString("fr-FR") : ""} relative à <strong>${type === "vitrage" ? "la réparation de vitrage" : "la réparation mécanique"} de votre véhicule ${d.immat || d.vehicule || ""}</strong>.</p>
+    <p>À défaut de règlement dans ce délai, nous nous verrons contraints de transmettre ce dossier à notre service contentieux et d'engager toute procédure de recouvrement judiciaire nécessaire, les frais supplémentaires étant à votre charge.</p>
+    `}
+
+    <!-- Montant dû -->
+    <div class="montant-box">
+      <div>
+        <div class="montant-label">Montant total de la facture</div>
+        <div style="font-size:10pt;color:#555;">Dont déjà réglé : ${fmtE(d.montantEncaisse||0)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:10pt;color:#555;margin-bottom:2px;">Solde restant dû</div>
+        <div class="montant-val">${fmtE(solde)}</div>
+      </div>
+    </div>
+
+    ${e.penalites ? `<p style="font-size:10pt;color:#555;">Conformément à nos conditions générales, des pénalités de retard sont applicables : ${e.penalites}.</p>` : ""}
+
+    <p>Vous pouvez effectuer votre règlement par :</p>
+    <p style="margin-left:8mm;">
+      • <strong>Espèces</strong> ou <strong>chèque</strong> directement à notre garage<br>
+      • <strong>Virement bancaire</strong>${e.iban ? " — IBAN : " + e.iban : ""}<br>
+      • <strong>Carte bancaire</strong> sur place
+    </p>
+
+    <p>Pour toute question, n'hésitez pas à nous contacter au <strong>${e.telephone || "—"}</strong>${e.email ? " ou par email : <strong>" + e.email + "</strong>" : ""}.</p>
+
+    <p>Dans l'attente de votre règlement, nous vous adressons, Madame, Monsieur, nos cordiales salutations.</p>
+  </div>
+
+  <!-- Signature -->
+  <div class="signature">
+    <div style="float:right;text-align:center;min-width:60mm;">
+      <div style="font-size:10pt;color:#555;margin-bottom:4px;">Le responsable,</div>
+      <div style="height:18mm;"></div>
+      <div style="font-size:11pt;font-weight:bold;">${e.nom || "Garage GlassMéca"}</div>
+    </div>
+    <div style="clear:both;"></div>
+  </div>
+
+  <!-- Pied de page -->
+  <div class="pied">
+    ${e.nom || "Garage GlassMéca"}${e.adresse ? " — " + e.adresse : ""}${e.telephone ? " — Tél : " + e.telephone : ""}
+    ${e.siret ? "<br>SIRET : " + e.siret : ""}${e.tva ? " — N° TVA : " + e.tva : ""}
+    ${e.cgu ? "<br>" + e.cgu : ""}
+  </div>
+
+</div>
+</body></html>`);
+  fenetre.document.close();
+
+  // Incrémenter le compteur de relances sur le dossier
+  d.nbRelances = nbRelances;
+  d.dernièreRelance = now.toISOString().split("T")[0];
+  saveData();
+}
