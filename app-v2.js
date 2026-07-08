@@ -62,7 +62,8 @@ function connecterUtilisateur(login, motDePasse){
     if(u.login !== login.trim()) return false;
     if(u.motDePasseHash === hashed) return true;
     if(u.motDePasse === motDePasse) return true;
-    if(u._defaultPass && motDePasse === "glasspro2024") return true;
+    // Mot de passe par défaut accepté UNIQUEMENT si aucun mot de passe personnalisé n'a été défini
+    if(u._defaultPass && !u.motDePasseHash && !u.motDePasse && motDePasse === "glasspro2024") return true;
     return false;
   });
   if(user){
@@ -122,12 +123,7 @@ function afficherEcranLogin(){
         </div>
         <div id="loginErreur" style="color:#f87171;font-size:13px;text-align:center;min-height:18px;"></div>
         <button onclick="tentativeConnexion()" style="width:100%;padding:12px;font-size:15px;margin-top:4px;">🔐 Se connecter</button>
-        <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid #1e293b;">
-          <p style="font-size:12px;color:#64748b;margin-bottom:10px;">Pas encore de compte ?</p>
-          <a href="inscription.html" style="display:block;width:100%;padding:11px;background:linear-gradient(135deg,#c9a86c,#f0c674);color:#000;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;text-align:center;box-sizing:border-box;">
-            ✨ Créer un compte gratuitement
-          </a>
-        </div>
+
       </div>
     </div>`;
   setTimeout(() => document.getElementById("loginInput")?.focus(), 100);
@@ -288,7 +284,7 @@ function changerPassUtilisateur(index){
   const nouveauPass = input?.value.trim();
   if(!nouveauPass){ toast("Mot de passe vide", "error"); return; }
   const users = getUtilisateurs();
-  delete users[index].motDePasse; users[index].motDePasseHash = hashPassword(nouveauPass);
+  delete users[index].motDePasse; delete users[index]._defaultPass; users[index].motDePasseHash = hashPassword(nouveauPass);
   saveUtilisateurs(users);
   input.value = "";
   toast("Mot de passe modifié ✓");
@@ -672,22 +668,39 @@ function normaliserNumerosDossiers(){
 function getProchainNumeroDossier(){
   normaliserNumerosDossiers();
   const annee = new Date().getFullYear();
-  const cle   = "prochainNumero_" + annee;
-  let seq = parseInt(localStorage.getItem(cle) || "1", 10);
-  if(isNaN(seq) || seq < 1) seq = 1;
-  localStorage.setItem(cle, String(seq + 1));
-  // Format : VIT-2026-001
-  return "VIT-" + annee + "-" + String(seq).padStart(3, "0");
+  // Basé sur les dossiers EXISTANTS (synchronisés Firebase) — pas de doublon multi-appareils
+  const prefix = "VIT-" + annee + "-";
+  const max = dossiers.reduce((acc, d) => {
+    const numStr = String(d.numero || "");
+    if(!numStr.startsWith(prefix)) return acc;
+    const n = parseInt(numStr.split("-").pop()) || 0;
+    return Math.max(acc, n);
+  }, 0);
+  return prefix + String(max + 1).padStart(3, "0");
 }
 
 function getProchainNumeroDocument(type){
-  // type = "DEV" | "FAC" | "OR"
+  // type = "DEV" | "FAC" | "OR" — basé sur les documents et dossiers EXISTANTS (synchronisés)
   const annee = new Date().getFullYear();
-  const cle   = "prochainNumero_" + type + "_" + annee;
-  let seq = parseInt(localStorage.getItem(cle) || "1", 10);
-  if(isNaN(seq) || seq < 1) seq = 1;
-  localStorage.setItem(cle, String(seq + 1));
-  return type + "-" + annee + "-" + String(seq).padStart(3, "0");
+  const prefix = type + "-" + annee + "-";
+  let max = 0;
+  // Chercher dans documents
+  (typeof documents !== "undefined" ? documents : []).forEach(d => {
+    const id = String(d.id || d.numero || "");
+    if(id.startsWith(prefix)){
+      max = Math.max(max, parseInt(id.split("-").pop()) || 0);
+    }
+  });
+  // Chercher aussi dans les dossiers mécanique (numeroFacture, ordreReparationNumero)
+  (typeof dossiersMecanique !== "undefined" ? dossiersMecanique : []).forEach(d => {
+    [d.numeroFacture, d.ordreReparationNumero, d.numeroDevis].forEach(id => {
+      const s = String(id || "");
+      if(s.startsWith(prefix)){
+        max = Math.max(max, parseInt(s.split("-").pop()) || 0);
+      }
+    });
+  });
+  return prefix + String(max + 1).padStart(3, "0");
 }
 
 /* =====================================
@@ -752,10 +765,10 @@ function rechercheGlobale(terme){
   // Dossiers vitrage
   dossiers.forEach((d,i)=>{
     const immatNorm = (d.immat||"").toLowerCase().replace(/[\s-]/g,"");
-    const texte = `${d.numero} ${d.client} ${d.vehicule} ${d.immat||""} ${d.sinistre||""} ${d.assurance||""} ${d.telephone||""} ${d.statut||""}`.toLowerCase();
+    const texte = `${d.numero} ${escHtml(d.client)} ${escHtml(d.vehicule)} ${escHtml(d.immat||"")} ${d.sinistre||""} ${d.assurance||""} ${escHtml(d.telephone||"")} ${d.statut||""}`.toLowerCase();
     if(texte.includes(tOrig) || immatNorm.includes(t)){
       const montant = d.facture || d.devis || "";
-      resultats.push({ type:"🪟 Vitrage", label:`N°${d.numero} — ${d.client} — ${d.immat||"—"}${montant?" — "+Number(montant).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €":""}`, action:`ouvrirDossier(${i})`, statut:d.statut });
+      resultats.push({ type:"🪟 Vitrage", label:`N°${d.numero} — ${escHtml(d.client)} — ${escHtml(d.immat||"—")}${montant?" — "+Number(montant).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €":""}`, action:`ouvrirDossier(${i})`, statut:d.statut });
     }
   });
 
@@ -783,10 +796,10 @@ function rechercheGlobale(terme){
   // Dossiers mécanique
   if(typeof dossiersMecanique!=="undefined"){
     dossiersMecanique.forEach((d,i)=>{
-      const texte = `${d.numero} ${d.client} ${d.vehicule||""} ${d.immat||""} ${d.typePanne||""} ${d.technicien||""} ${d.statut||""}`.toLowerCase();
+      const texte = `${d.numero} ${escHtml(d.client)} ${escHtml(d.vehicule||"")} ${escHtml(d.immat||"")} ${d.typePanne||""} ${d.technicien||""} ${d.statut||""}`.toLowerCase();
       if(texte.includes(t)){
         const montant = d.facture || d.devis || "";
-        resultats.push({ type:"🔩 Méca", label:`N°${d.numero} — ${d.client} — ${d.immat||"—"}${montant?" — "+Number(montant).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €":""}`, action:`ouvrirDossierMecanique(${i});showPage('mecanique')`, statut:d.statut });
+        resultats.push({ type:"🔩 Méca", label:`N°${d.numero} — ${escHtml(d.client)} — ${escHtml(d.immat||"—")}${montant?" — "+Number(montant).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €":""}`, action:`ouvrirDossierMecanique(${i});showPage('mecanique')`, statut:d.statut });
       }
     });
   }
@@ -1576,9 +1589,9 @@ function resetFormDossier(){
   });
 }
 
-function supprimerDossier(index){
+function supprimerDossier(index, ev){
   // Créer un mini-panneau de confirmation dans la ligne du tableau
-  const btn = event?.target || document.querySelector(`[onclick*="supprimerDossier(${index})"]`);
+  const btn = (ev||window.event)?.target || document.querySelector(`[onclick*="supprimerDossier(${index})"]`);
   if(btn){
     // Si confirmation déjà affichée, exécuter
     if(btn.dataset.confirming === "1"){
@@ -1774,7 +1787,7 @@ function renderDossiers(){
         <button onclick="genererDeclaration(${i})">📋 Déclaration</button>
         <button onclick="genererCessionCreances(${i})" style="background:#7c3aed;">💼 Cession</button>
         <button onclick="emailAssurance(${i})">📧 Email</button>
-        <button class="delete-btn" onclick="supprimerDossier(${i})">🗑</button>
+        <button class="delete-btn" onclick="supprimerDossier(${i},event)">🗑</button>
       </td>
     </tr>
   `).join("");
@@ -1930,7 +1943,7 @@ function afficherTransfertDossier(indexSource){
     if(i === indexSource) return;
     const opt = document.createElement("option");
     opt.value = i;
-    opt.textContent = `N°${d.numero} — ${d.client} — ${d.vehicule} (${d.immat||"—"})`;
+    opt.textContent = `N°${d.numero} — ${escHtml(d.client)} — ${escHtml(d.vehicule)} (${escHtml(d.immat||"—")})`;
     select.appendChild(opt);
   });
 }
@@ -1994,7 +2007,7 @@ function imprimerDossier(){
 
   const fenetre = window.open("","","width=850,height=1100");
   fenetre.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-  <title>Dossier ${d.numero} — ${d.client}</title>
+  <title>Dossier ${d.numero} — ${escHtml(d.client)}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
     body{font-family:Arial,sans-serif;font-size:13px;color:#111;background:#fff;padding:24px;}
@@ -2043,15 +2056,15 @@ function imprimerDossier(){
   <div class="grid2">
     <div class="box">
       <h3>Client</h3>
-      <div class="field"><span class="label">Nom</span><span class="val">${d.client||"—"}</span></div>
-      <div class="field"><span class="label">Téléphone</span><span class="val">${d.telephone||"—"}</span></div>
-      <div class="field"><span class="label">Email</span><span class="val">${d.email||"—"}</span></div>
-      <div class="field"><span class="label">Adresse</span><span class="val">${d.adresse||"—"}</span></div>
+      <div class="field"><span class="label">Nom</span><span class="val">${escHtml(d.client||"—")}</span></div>
+      <div class="field"><span class="label">Téléphone</span><span class="val">${escHtml(d.telephone||"—")}</span></div>
+      <div class="field"><span class="label">Email</span><span class="val">${escHtml(d.email||"—")}</span></div>
+      <div class="field"><span class="label">Adresse</span><span class="val">${escHtml(d.adresse||"—")}</span></div>
     </div>
     <div class="box">
       <h3>Véhicule</h3>
-      <div class="field"><span class="label">Marque / Modèle</span><span class="val">${d.vehicule||d.marque||"—"}${d.modele?" "+d.modele:""}</span></div>
-      <div class="field"><span class="label">Immatriculation</span><span class="val">${d.immat||"—"}</span></div>
+      <div class="field"><span class="label">Marque / Modèle</span><span class="val">${escHtml(d.vehicule||d.marque||"—")}${d.modele?" "+d.modele:""}</span></div>
+      <div class="field"><span class="label">Immatriculation</span><span class="val">${escHtml(d.immat||"—")}</span></div>
       <div class="field"><span class="label">VIN</span><span class="val">${d.vin||"—"}</span></div>
       <div class="field"><span class="label">Couleur</span><span class="val">${d.couleur||"—"}</span></div>
     </div>
@@ -2084,7 +2097,7 @@ function imprimerDossier(){
     </div>
   </div>
 
-  ${d.notes?`<div class="box" style="margin-bottom:18px;"><h3>Notes internes</h3><p style="font-size:12px;color:#444;line-height:1.6;">${d.notes}</p></div>`:""}
+  ${d.notes?`<div class="box" style="margin-bottom:18px;"><h3>Notes internes</h3><p style="font-size:12px;color:#444;line-height:1.6;">${escHtml(d.notes)}</p></div>`:""}
 
   <div class="signature">
     <div class="sig-box"><p>Signature du client</p><div style="height:60px;"></div><p style="font-size:12px;">Lu et approuvé · ${today}</p></div>
@@ -2321,12 +2334,12 @@ function emailAssurance(index){
 
 Veuillez trouver ci-dessous les informations pour une demande de prise en charge bris de glace.
 
-Client : ${d.client}
-Téléphone : ${d.telephone||""}
-Adresse : ${d.adresse||""}
+Client : ${escHtml(d.client)}
+Téléphone : ${escHtml(d.telephone||"")}
+Adresse : ${escHtml(d.adresse||"")}
 
-Véhicule : ${d.vehicule}
-Immatriculation : ${d.immat}
+Véhicule : ${escHtml(d.vehicule)}
+Immatriculation : ${escHtml(d.immat)}
 Kilométrage : ${d.kilometrage||""}
 
 Assurance : ${d.assurance}
@@ -3100,7 +3113,8 @@ function confirmerRattachement(idxDoc){
 function retirerRattachementDoc(idxDoc){
   const doc = documents[idxDoc];
   if(!doc) return;
-  confirmerAction("Retirer le rattachement de ce document ?", ()=>{ doc.dossierIdx=null; doc.dossierNumero=""; localStorage.setItem("documents",JSON.stringify(documents)); renderDocuments(); toast("Rattachement retiré"); });
+  if(!window.confirm("Retirer le rattachement de ce document ?")) return;
+  doc.dossierIdx=null; doc.dossierNumero=""; localStorage.setItem("documents",JSON.stringify(documents)); renderDocuments(); toast("Rattachement retiré");
 }
 
 /* =====================================
@@ -3182,14 +3196,14 @@ function _remplirSelectTransfert(filtre){
   select.innerHTML = '<option value="">-- Choisir un dossier --</option>';
   const liste = type === "mecanique" ? dossiersMecanique : dossiers;
   liste.forEach((d,i) => {
-    const texte = `${d.numero} ${d.client} ${d.vehicule||""} ${d.immat||""}`.toLowerCase();
+    const texte = `${d.numero} ${escHtml(d.client)} ${escHtml(d.vehicule||"")} ${escHtml(d.immat||"")}`.toLowerCase();
     if(f && !texte.includes(f)) return;
     const opt = document.createElement("option");
     opt.value = i;
     if(type === "mecanique"){
-      opt.textContent = `${d.numero} — ${d.client} — ${d.vehicule||"—"} (${d.immat||"—"})`;
+      opt.textContent = `${d.numero} — ${escHtml(d.client)} — ${escHtml(d.vehicule||"—")} (${escHtml(d.immat||"—")})`;
     } else {
-      opt.textContent = `N°${d.numero} — ${d.client} — ${d.vehicule} (${d.immat||"—"})`;
+      opt.textContent = `N°${d.numero} — ${escHtml(d.client)} — ${escHtml(d.vehicule)} (${escHtml(d.immat||"—")})`;
     }
     select.appendChild(opt);
   });
@@ -3243,7 +3257,7 @@ function confirmerTransfertVersDossier(){
   if(!d){ toast("Dossier introuvable", "error"); return; }
 
   const icon = typeDos === "mecanique" ? "🔩" : "🪟";
-  if(!window.confirm(`Transférer ce ${typeDoc==="facture"?"facture":"devis"} (${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} €) vers le dossier ${icon} ${d.numero} — ${d.client} ?`)) return;
+  if(!window.confirm(`Transférer ce ${typeDoc==="facture"?"facture":"devis"} (${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} €) vers le dossier ${icon} ${d.numero} — ${escHtml(d.client)} ?`)) return;
   if(typeDos === "mecanique"){
       const lignes = lignesDocumentVersLignesMecanique();
       if(typeDoc === "facture"){
@@ -3757,7 +3771,7 @@ function renderDossiersMecanique(liste){
         <button onclick="ouvrirDossierMecanique(${realIdx})" style="background:#7c3aed;">📋 O.R.</button>
         <button onclick="modifierDossierMecanique(${realIdx})">✏ Modifier</button>
         <button onclick="envoyerSmsVehiculeTermine(${realIdx})" style="background:#0891b2;" title="SMS véhicule prêt">📱</button>
-        <button class="delete-btn" onclick="supprimerDossierMecanique(${realIdx})">🗑</button>
+        <button class="delete-btn" onclick="supprimerDossierMecanique(${realIdx},event)">🗑</button>
       </td>
     </tr>`;
   }).join("");
@@ -3778,7 +3792,7 @@ function rechercherMecanique(){
   const q = (document.getElementById("mec_recherche")?.value||"").toLowerCase();
   const statut = document.getElementById("mec_filtreStatut")?.value||"";
   const result = dossiersMecanique.filter(d=>{
-    const texte = `${d.numero} ${d.client} ${d.immat} ${d.vehicule} ${d.typePanne} ${d.technicien}`.toLowerCase();
+    const texte = `${d.numero} ${escHtml(d.client)} ${escHtml(d.immat)} ${escHtml(d.vehicule)} ${d.typePanne} ${d.technicien}`.toLowerCase();
     const okQ = !q || texte.includes(q);
     const okS = !statut || d.statut===statut;
     return okQ && okS;
@@ -3802,8 +3816,8 @@ function changerStatutMecanique(index, statut){
    MÉCANIQUE — SUPPRIMER
 ===================================== */
 
-function supprimerDossierMecanique(index){
-  const btn = event?.target || document.querySelector(`[onclick*="supprimerDossierMecanique(${index})"]`);
+function supprimerDossierMecanique(index, ev){
+  const btn = (ev||window.event)?.target || document.querySelector(`[onclick*="supprimerDossierMecanique(${index})"]`);
   if(btn){
     if(btn.dataset.confirming === "1"){
       dossiersMecanique.splice(index, 1);
@@ -3831,14 +3845,7 @@ function supprimerDossierMecanique(index){
     toast("Dossier supprimé ✓");
   }
 }
-function supprimerDossierMecanique(index){
-  if(!window.confirm("Supprimer définitivement ce dossier mécanique ?\nCette action est irréversible.")) return;
-  dossiersMecanique.splice(index, 1);
-  saveData();
-  renderDossiersMecanique();
-  majCompteursMecanique();
-  toast("Dossier supprimé");
-}
+
 
 /* =====================================
    MÉCANIQUE — MODIFIER
@@ -3966,7 +3973,7 @@ function ouvrirDossierMecanique(index){
         <button onclick="imprimerEtiquetteVehicule(${index},'mecanique')" style="background:#0891b2;font-size:12px;">🏷 Étiquette</button>
         <button onclick="envoyerSmsVehiculeTermine(${index})" style="background:#0891b2;">📱 SMS</button>
         <button onclick="document.getElementById('detailMecanique').innerHTML=''" style="background:#334155;">✖ Fermer</button>
-        <button class="delete-btn" onclick="supprimerDossierMecanique(${index})">🗑 Supprimer</button>
+        <button class="delete-btn" onclick="supprimerDossierMecanique(${index},event)">🗑 Supprimer</button>
       </div>
     </div>`;
 
@@ -4103,7 +4110,7 @@ function envoyerSmsVehiculeTermine(index){
   const telEntreprise = ent.telephone || "";
 
   // Message SMS par défaut
-  const msgDefaut = `Bonjour ${d.client},\nVotre véhicule ${d.vehicule||""}${d.immat?" ("+d.immat+")":""} est prêt et disponible à récupérer.\n${telEntreprise ? "📞 "+telEntreprise : ""}\n${nomEntreprise}`;
+  const msgDefaut = `Bonjour ${escHtml(d.client)},\nVotre véhicule ${escHtml(d.vehicule||"")}${d.immat?" ("+d.immat+")":""} est prêt et disponible à récupérer.\n${telEntreprise ? "📞 "+telEntreprise : ""}\n${nomEntreprise}`;
 
   ouvrirModal("📱 Envoyer un SMS — Véhicule prêt", `
     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -4744,14 +4751,7 @@ function exporterExcelGlobal(){
    7. MODE CLAIR / SOMBRE
 ───────────────────────────────────────────────────*/
 
-function toggleTheme(){
-  const body = document.body;
-  const isDark = !body.classList.contains("theme-light");
-  body.classList.toggle("theme-light", isDark);
-  localStorage.setItem("theme", isDark?"light":"dark");
-  const btn = document.getElementById("btnTheme");
-  if(btn) btn.textContent = isDark ? "🌙 Mode sombre" : "☀️ Mode clair";
-}
+
 
 function initTheme(){
   const saved = localStorage.getItem("theme");
@@ -4925,8 +4925,8 @@ Sauf erreur de notre part, nous n'avons pas reçu de réponse de votre part conc
 
 COORDONNÉES CLIENT
 ──────────────────────────────────────────
-Nom          : ${d.client||"—"}
-Véhicule     : ${d.vehicule||"—"} ${d.modele||""} ${d.immat?"— Immat : "+d.immat:""}
+Nom          : ${escHtml(d.client||"—")}
+Véhicule     : ${escHtml(d.vehicule||"—")} ${d.modele||""} ${d.immat?"— Immat : "+d.immat:""}
 Contrat N°   : ${d.contrat||"—"}
 N° sinistre  : ${d.sinistre||"—"}
 Date sinistre: ${d.dateSinistre||"—"}
@@ -5062,12 +5062,12 @@ Madame, Monsieur,
 Malgré notre précédente relance, nous n'avons toujours pas reçu de réponse concernant la prise en charge du dossier ci-dessus.
 
 Ce dossier est en attente depuis ${jours} jours. Sans retour de votre part sous 5 jours ouvrés, nous nous verrons contraints de :
-  1. Facturer la totalité de la prestation directement à votre assuré(e) — ${d.client}
+  1. Facturer la totalité de la prestation directement à votre assuré(e) — ${escHtml(d.client)}
   2. Informer votre assuré(e) de l'absence de réponse de votre part
   3. Transmettre le dossier à notre service contentieux
 
 Montant en attente : ${montant.toLocaleString("fr-FR",{minimumFractionDigits:2})} €${resteDu&&rembourse?" (reste dû : "+resteDu.toLocaleString("fr-FR",{minimumFractionDigits:2})+" €)":""}
-Véhicule : ${d.vehicule||"—"} — Immat : ${d.immat||"—"}
+Véhicule : ${escHtml(d.vehicule||"—")} — Immat : ${escHtml(d.immat||"—")}
 Contrat N° : ${d.contrat||"—"} — N° sinistre : ${d.sinistre||"—"}
 
 Veuillez agréer, Madame, Monsieur, nos salutations distinguées.
@@ -5091,11 +5091,11 @@ Objet : MISE EN DEMEURE — Dossier N° ${d.numero}
 
 Madame, Monsieur,
 
-Par la présente, nous vous mettons en demeure de procéder au règlement de la prise en charge du sinistre N° ${d.sinistre||"—"} concernant votre assuré(e) ${d.client}, dans un délai de 15 jours à compter de la réception du présent courrier.
+Par la présente, nous vous mettons en demeure de procéder au règlement de la prise en charge du sinistre N° ${d.sinistre||"—"} concernant votre assuré(e) ${escHtml(d.client)}, dans un délai de 15 jours à compter de la réception du présent courrier.
 
 RÉCAPITULATIF DU DOSSIER
-• Assuré         : ${d.client}
-• Véhicule       : ${d.vehicule||"—"} — Immat : ${d.immat||"—"}
+• Assuré         : ${escHtml(d.client)}
+• Véhicule       : ${escHtml(d.vehicule||"—")} — Immat : ${escHtml(d.immat||"—")}
 • N° contrat     : ${d.contrat||"—"}
 • N° sinistre    : ${d.sinistre||"—"}
 • Date sinistre  : ${d.dateSinistre||"—"}
@@ -5124,12 +5124,12 @@ Objet : Confirmation de réception — Prise en charge N° ${d.sinistre||"—"}
 
 Madame, Monsieur,
 
-Nous accusons bonne réception de votre accord de prise en charge concernant le dossier N° ${d.numero} — ${d.client}.
+Nous accusons bonne réception de votre accord de prise en charge concernant le dossier N° ${d.numero} — ${escHtml(d.client)}.
 
 Nous procédons à la clôture du dossier et vous confirmons les informations suivantes :
 • Montant pris en charge : ${rembourse?rembourse.toLocaleString("fr-FR",{minimumFractionDigits:2})+" €":"à définir"}
 • Franchise client      : ${d.montantFranchise||"—"} €
-• Véhicule             : ${d.vehicule||"—"} — ${d.immat||"—"}
+• Véhicule             : ${escHtml(d.vehicule||"—")} — ${escHtml(d.immat||"—")}
 
 Nous vous remercions pour votre traitement rapide de ce dossier.
 
@@ -5162,8 +5162,8 @@ Sauf erreur de notre part, nous n'avons pas reçu de réponse de votre part conc
 
 COORDONNÉES CLIENT
 ──────────────────────────────────────────
-Nom          : ${d.client||"—"}
-Véhicule     : ${d.vehicule||"—"} ${d.modele||""} ${d.immat?"— Immat : "+d.immat:""}
+Nom          : ${escHtml(d.client||"—")}
+Véhicule     : ${escHtml(d.vehicule||"—")} ${d.modele||""} ${d.immat?"— Immat : "+d.immat:""}
 Contrat N°   : ${d.contrat||"—"}
 N° sinistre  : ${d.sinistre||"—"}
 Date sinistre: ${d.dateSinistre||"—"}
@@ -5550,7 +5550,7 @@ function logAction(action, details){
   if(_historiqueActions.length > 200) _historiqueActions = _historiqueActions.slice(0,200);
   localStorage.setItem("historiqueActions", JSON.stringify(_historiqueActions));
   if(db && _firebaseActif){
-    db.ref("/historiqueActions").set(_historiqueActions).catch(()=>{});
+    db.ref("/garages/" + _getGarageId() + "/historiqueActions").set(_historiqueActions).catch(()=>{});
   }
 }
 
@@ -5983,7 +5983,7 @@ let stockPieces = JSON.parse(localStorage.getItem("stockPieces")) || [];
 function saveStock(){
   localStorage.setItem("stockPieces", JSON.stringify(stockPieces));
   if(db && _firebaseActif){
-    db.ref("/stockPieces").set(stockPieces).catch(e=>console.warn("Erreur save stock:",e));
+    db.ref("/garages/" + _getGarageId() + "/stockPieces").set(stockPieces).catch(e=>console.warn("Erreur save stock:",e));
   }
   majCompteursBadgeStock();
 }
@@ -6196,7 +6196,7 @@ const COULEURS_TECH = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d
 function savePlanning(){
   localStorage.setItem("tachesPlanning", JSON.stringify(tachesPlanning));
   if(db && _firebaseActif){
-    db.ref("/tachesPlanning").set(tachesPlanning).catch(e=>console.warn("Erreur save planning:",e));
+    db.ref("/garages/" + _getGarageId() + "/tachesPlanning").set(tachesPlanning).catch(e=>console.warn("Erreur save planning:",e));
   }
 }
 
@@ -6446,7 +6446,7 @@ let _catalogueNextId = Math.max(...catalogueTarifs.map(t=>t.id||0), 0) + 1;
 
 function saveCatalogue(){
   localStorage.setItem("catalogueTarifs", JSON.stringify(catalogueTarifs));
-  if(db && _firebaseActif) db.ref("/catalogueTarifs").set(catalogueTarifs).catch(e=>console.warn(e));
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/catalogueTarifs").set(catalogueTarifs).catch(e=>console.warn(e));
 }
 
 const CATEG_COULEURS = { "Vitrage":"#0891b2", "Mécanique":"#7c3aed", "Carrosserie":"#ea580c", "Électrique":"#ca8a04" };
@@ -6578,7 +6578,7 @@ let _cmdNextId = Math.max(...commandesFournisseurs.map(c=>parseInt(c.numero||"0"
 
 function saveCommandes(){
   localStorage.setItem("commandesFournisseurs", JSON.stringify(commandesFournisseurs));
-  if(db && _firebaseActif) db.ref("/commandesFournisseurs").set(commandesFournisseurs).catch(e=>console.warn(e));
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/commandesFournisseurs").set(commandesFournisseurs).catch(e=>console.warn(e));
   majCompteursCmds();
 }
 
@@ -6826,7 +6826,7 @@ function ouvrirReglementDoc(i){
       documents[i].dateReglement   = document.getElementById("regl_date")?.value   || "";
       documents[i].noteReglement   = document.getElementById("regl_note")?.value.trim() || "";
       localStorage.setItem("documents", JSON.stringify(documents));
-      if(db && _firebaseActif) db.ref("/documents").set(documents).catch(()=>{});
+      if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/documents").set(documents).catch(()=>{});
       renderDocuments();
       toast(`Règlement mis à jour : ${documents[i].statutReglement} ✓`);
     }
@@ -6841,7 +6841,7 @@ function reglementRapide(i, statut, mode){
   doc.montantRegle    = doc.totalTTC;
   doc.dateReglement   = new Date().toISOString().split("T")[0];
   localStorage.setItem("documents", JSON.stringify(documents));
-  if(db && _firebaseActif) db.ref("/documents").set(documents).catch(()=>{});
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/documents").set(documents).catch(()=>{});
   // Fermer modal si ouverte
   const modal = document.getElementById("modal");
   if(modal) modal.style.display = "none";
@@ -7454,7 +7454,56 @@ function effacerSignature(){
   toast("Signature retirée");
 }
 
-// Intégrer la signature dans sauvegarderDocument
+
+/* ── Sauvegarder le document courant (devis/facture) ── */
+function sauvegarderDocument(){
+  if(lignesDocument.length === 0){ toast("Ajoutez au moins une ligne", "error"); return; }
+
+  const type   = document.getElementById("typeDocument")?.value || "devis";
+  const titre  = document.getElementById("titreDocument")?.value.trim() || "";
+  const dateD  = document.getElementById("dateDocument")?.value || new Date().toISOString().split("T")[0];
+  const tech   = document.getElementById("technicienDocument")?.value.trim() || "";
+  const dossierIdxRaw = document.getElementById("dossierRattache")?.value;
+  const dossierIdx = dossierIdxRaw !== "" && dossierIdxRaw !== undefined ? parseInt(dossierIdxRaw) : null;
+  const coutAchat  = parseFloat(document.getElementById("coutAchatPieces")?.value || "0") || 0;
+
+  // Totaux
+  let totalTTC = 0;
+  lignesDocument.forEach(l=>{
+    const puTTC = l.prixTTC || (l.prixHT * (1 + (l.tva||20)/100));
+    totalTTC += puTTC * l.qte;
+  });
+
+  const numero = genererNumeroDocument(type);
+  const doc = {
+    id:         numero,
+    type:       type,
+    titre:      titre || numero,
+    date:       dateD,
+    technicien: tech,
+    lignes:     JSON.parse(JSON.stringify(lignesDocument)),
+    totalTTC:   totalTTC,
+    totalHT:    totalTTC / 1.20,
+    coutAchat:  coutAchat,
+    dossierIdx: dossierIdx,
+    signature:  _signatureData || null,
+    statutReglement: type === "facture" ? "Non réglé" : "",
+    creeLe:     new Date().toISOString()
+  };
+
+  documents.push(doc);
+  localStorage.setItem("documents", JSON.stringify(documents));
+  saveData();
+
+  // Reporter le montant sur le dossier rattaché
+  if(dossierIdx !== null) appliquerDocumentAuDossier(doc);
+
+  _signatureData = "";
+  renderDocuments();
+  majDashboard();
+  majNumeroDocument();
+  toast(`✅ ${type === "facture" ? "Facture" : "Devis"} ${numero} sauvegardé — ${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} € TTC`);
+}
 
 
 // Intégrer la signature dans le PDF
@@ -7766,7 +7815,7 @@ function exporterFactureXML(i){
   documents[i].exportXML     = new Date().toISOString().split("T")[0];
   documents[i].nomFichierXML = nomFichier;
   localStorage.setItem("documents", JSON.stringify(documents));
-  if(db && _firebaseActif) db.ref("/documents").set(documents).catch(()=>{});
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/documents").set(documents).catch(()=>{});
   renderDocuments();
   toast(`✅ Facture ${doc.id} exportée en XML Factur-X — ${nomFichier}`);
 }
@@ -7786,7 +7835,7 @@ function exporterToutesFacturesXML(){
     count++;
   });
   localStorage.setItem("documents", JSON.stringify(documents));
-  if(db && _firebaseActif) db.ref("/documents").set(documents).catch(()=>{});
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/documents").set(documents).catch(()=>{});
   renderDocuments();
   toast(`✅ ${count} facture${count>1?"s":""} exportée${count>1?"s":""} en XML Factur-X`);
 }
@@ -7804,7 +7853,7 @@ function exporterNonExporteesXML(){
     documents[i].nomFichierXML = nom;
   });
   localStorage.setItem("documents", JSON.stringify(documents));
-  if(db && _firebaseActif) db.ref("/documents").set(documents).catch(()=>{});
+  if(db && _firebaseActif) db.ref("/garages/" + _getGarageId() + "/documents").set(documents).catch(()=>{});
   renderDocuments();
   toast(`✅ ${nonExp.length} nouvelle${nonExp.length>1?"s":""} facture${nonExp.length>1?"s":""} exportée${nonExp.length>1?"s":""}`);
 }
@@ -8301,7 +8350,7 @@ function imprimerFinancierFast(index, typeDossier, typeDoc){
   pdf.text(typeDoc==="facture" ? "FACTURE" : "DEVIS", 105, 12, {align:"center"});
   pdf.setFontSize(9); pdf.setFont(undefined,"normal");
   pdf.text(`${e.nom||"Garage GlassMéca"} — ${today}`, 105, 20, {align:"center"});
-  pdf.text(`Dossier : ${d.numero} — Client : ${d.client}`, 105, 26, {align:"center"});
+  pdf.text(`Dossier : ${d.numero} — Client : ${escHtml(d.client)}`, 105, 26, {align:"center"});
 
   let y = 40;
   pdf.setTextColor(0,0,0); pdf.setFontSize(9);
@@ -8316,8 +8365,8 @@ function imprimerFinancierFast(index, typeDossier, typeDoc){
   pdf.setFillColor(241,245,249); pdf.rect(110,y,86,22,"F");
   pdf.setFont(undefined,"bold"); pdf.text("VÉHICULE", 112, y+6);
   pdf.setFont(undefined,"normal");
-  pdf.text(`${d.vehicule||d.marque||""} ${d.modele||""}`, 112, y+12);
-  pdf.text(`Immat : ${d.immat||"—"}`, 112, y+17);
+  pdf.text(`${escHtml(d.vehicule||d.marque||"")} ${d.modele||""}`, 112, y+12);
+  pdf.text(`Immat : ${escHtml(d.immat||"—")}`, 112, y+17);
   y += 28;
 
   if(lignes.length > 0){
@@ -9192,7 +9241,7 @@ function genererNotifications(){
       const jours = Math.floor((today - new Date(d.dateCreation))/86400000);
       if(jours >= 7) notifs.push({
         type:"warning", icon:"🪟",
-        texte:`Dossier ${d.numero} (${d.client}) en attente depuis ${jours}j`,
+        texte:`Dossier ${d.numero} (${escHtml(d.client)}) en attente depuis ${jours}j`,
         action:`ouvrirDossier(${dossiers.indexOf(d)})`
       });
     }
@@ -9875,10 +9924,10 @@ function renderDashboardVitrage(){
           ${impayees.slice(0,10).map((d,i)=>{
             const solde = Math.max(0,Number(d.facture||0)-Number(d.montantEncaisse||0));
             return `<div style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border-radius:6px;padding:8px 12px;font-size:12px;">
-              <span style="color:#94a3b8;">N°${d.numero} — ${d.client} — ${d.immat||""}</span>
+              <span style="color:#94a3b8;">N°${d.numero} — ${escHtml(d.client)} — ${escHtml(d.immat||"")}</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <span style="color:#f87171;font-weight:700;">${fmtE(solde)}</span>
-                ${d.telephone?`<button onclick="window.open('sms:${d.telephone}')" style="background:#16a34a;padding:2px 8px;font-size:11px;">📱 SMS</button>`:""}
+                ${d.telephone?`<button onclick="window.open('sms:${escHtml(d.telephone)}')" style="background:#16a34a;padding:2px 8px;font-size:11px;">📱 SMS</button>`:""}
                 <button onclick="ouvrirFinancierDossier(${dossiers.indexOf(d)})" style="background:#0891b2;padding:2px 8px;font-size:11px;">💰 Régler</button>
               </div>
             </div>`;
@@ -9926,8 +9975,8 @@ function ouvrirRelancesImpayees(){
                 <div>
                   <span style="color:#38bdf8;font-weight:bold;">N°${d.numero}</span>
                   <span style="color:#94a3b8;margin-left:8px;">${d._type==="vitrage"?"🪟":"🔩"}</span>
-                  <span style="color:#f0f4f8;margin-left:8px;">${d.client}</span>
-                  ${d.immat?`<span style="color:#64748b;font-size:11px;margin-left:6px;">${d.immat}</span>`:""}
+                  <span style="color:#f0f4f8;margin-left:8px;">${escHtml(d.client)}</span>
+                  ${d.immat?`<span style="color:#64748b;font-size:11px;margin-left:6px;">${escHtml(d.immat)}</span>`:""}
                 </div>
                 <div style="text-align:right;">
                   <div style="font-size:16px;font-weight:900;color:#f87171;">${fmtE(solde)}</div>
@@ -9936,9 +9985,9 @@ function ouvrirRelancesImpayees(){
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 ${d.telephone?`
-                  <button onclick="envoyerSmsRelance('${d.telephone}','${d.client}','${fmtE(solde)}')" style="background:#16a34a;font-size:12px;">📱 SMS relance</button>
-                  <button onclick="window.open('tel:${d.telephone}')" style="background:#0891b2;font-size:12px;">📞 Appeler</button>`:""}
-                ${d.email?`<button onclick="window.open('mailto:${d.email}?subject=Relance+facture&body=Bonjour+${encodeURIComponent(d.client)}%2C+votre+facture+N%C2%B0${d.numero}+de+${encodeURIComponent(fmtE(solde))}+reste+impay%C3%A9e.')" style="background:#334155;font-size:12px;">✉️ Email</button>`:""}
+                  <button onclick="envoyerSmsRelance('${escHtml(d.telephone)}','${escHtml(d.client)}','${fmtE(solde)}')" style="background:#16a34a;font-size:12px;">📱 SMS relance</button>
+                  <button onclick="window.open('tel:${escHtml(d.telephone)}')" style="background:#0891b2;font-size:12px;">📞 Appeler</button>`:""}
+                ${d.email?`<button onclick="window.open('mailto:${escHtml(d.email)}?subject=Relance+facture&body=Bonjour+${encodeURIComponent(d.client)}%2C+votre+facture+N%C2%B0${d.numero}+de+${encodeURIComponent(fmtE(solde))}+reste+impay%C3%A9e.')" style="background:#334155;font-size:12px;">✉️ Email</button>`:""}
                 <button onclick="encaisserDepuisRelance('${d._type}',${d._origIndex})" style="background:#7c3aed;font-size:12px;">💰 Encaisser</button>
                 <button onclick="genererLettreRelance('${d._type}',${d._origIndex})" style="background:#c9a86c;color:#000;font-size:12px;">📄 Lettre</button>
               </div>
@@ -9964,10 +10013,10 @@ function afficherNoteDossier(index){
   const d = dossiers[index];
   if(!d) return;
 
-  ouvrirModal(`📝 Notes — Dossier ${d.numero} — ${d.client}`,
+  ouvrirModal(`📝 Notes — Dossier ${d.numero} — ${escHtml(d.client)}`,
     `<div style="display:flex;flex-direction:column;gap:12px;">
       <p style="font-size:12px;color:#64748b;">Notes internes (non imprimées sur les documents clients).</p>
-      <textarea id="notesDossierInput" rows="8" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;color:#f1f5f9;font-size:13px;resize:vertical;">${d.notes||""}</textarea>
+      <textarea id="notesDossierInput" rows="8" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;color:#f1f5f9;font-size:13px;resize:vertical;">${escHtml(d.notes||"")}</textarea>
     </div>`,
     function(){
       d.notes = document.getElementById("notesDossierInput")?.value||"";
@@ -9981,10 +10030,10 @@ function afficherNoteDossierMecanique(index){
   const d = dossiersMecanique[index];
   if(!d) return;
 
-  ouvrirModal(`📝 Notes — Dossier ${d.numero} — ${d.client}`,
+  ouvrirModal(`📝 Notes — Dossier ${d.numero} — ${escHtml(d.client)}`,
     `<div style="display:flex;flex-direction:column;gap:12px;">
       <p style="font-size:12px;color:#64748b;">Notes internes (non imprimées sur les documents clients).</p>
-      <textarea id="notesDossierInput" rows="8" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;color:#f1f5f9;font-size:13px;resize:vertical;">${d.notes||""}</textarea>
+      <textarea id="notesDossierInput" rows="8" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;color:#f1f5f9;font-size:13px;resize:vertical;">${escHtml(d.notes||"")}</textarea>
     </div>`,
     function(){
       d.notes = document.getElementById("notesDossierInput")?.value||"";
@@ -10026,6 +10075,19 @@ function ajouterPhotoDossier(index){
   );
 }
 
+function _compresserImage(dataUrl, maxW, quality, callback){
+  const img = new Image();
+  img.onload = function(){
+    const scale = Math.min(1, maxW / img.width);
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.round(img.width  * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    callback(canvas.toDataURL("image/jpeg", quality));
+  };
+  img.src = dataUrl;
+}
+
 function previsualiserPhotos(input){
   const files = Array.from(input.files);
   const preview = document.getElementById("previewPhotos");
@@ -10036,16 +10098,19 @@ function previsualiserPhotos(input){
   files.forEach(file=>{
     const reader = new FileReader();
     reader.onload = e=>{
-      d.photos.push(e.target.result);
+      // Compresser l'image : max 1024px de large, qualité 70% → ~10x plus léger
+      _compresserImage(e.target.result, 1024, 0.7, compressed => {
+      d.photos.push(compressed);
       saveData();
       // Ajouter dans la preview
       const div = document.createElement("div");
       div.style.cssText = "position:relative;display:inline-block;";
       const idx = d.photos.length-1;
-      div.innerHTML = `<img src="${e.target.result}" style="width:110px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #334155;">
+      div.innerHTML = `<img src="${compressed}" style="width:110px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #334155;">
         <button onclick="supprimerPhotoDossier(${_dossierIndex},${idx})" style="position:absolute;top:2px;right:2px;background:#7f1d1d;padding:1px 5px;font-size:10px;border-radius:3px;">✖</button>`;
       preview.appendChild(div);
-      toast("Photo ajoutée ✓");
+      toast("Photo ajoutée (compressée) ✓");
+      });
     };
     reader.readAsDataURL(file);
   });
@@ -10371,7 +10436,7 @@ function imprimerEtiquetteVehicule(index, type){
   if(!d){ toast("Dossier introuvable","error"); return; }
 
   const e = entreprise;
-  const qr = `N°${d.numero} | ${d.client} | ${d.immat||""} | ${d.vehicule||""}`;
+  const qr = `N°${d.numero} | ${escHtml(d.client)} | ${escHtml(d.immat||"")} | ${escHtml(d.vehicule||"")}`;
 
   const fenetre = window.open("","","width=500,height=700");
   fenetre.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -10416,14 +10481,14 @@ function imprimerEtiquetteVehicule(index, type){
         </div>
         <div style="font-size:10px;color:#94a3b8;">${new Date().toLocaleDateString("fr-FR")}</div>
       </div>
-      ${d.immat?`<div class="etiquette-immat">🚘 ${d.immat}</div>`:""}
+      ${d.immat?`<div class="etiquette-immat">🚘 ${escHtml(d.immat)}</div>`:""}
       <div class="etiquette-row">
         <span class="etiquette-label">Client</span>
-        <span class="etiquette-val">${d.client||"—"}</span>
+        <span class="etiquette-val">${escHtml(d.client||"—")}</span>
       </div>
       <div class="etiquette-row">
         <span class="etiquette-label">Véhicule</span>
-        <span class="etiquette-val">${d.vehicule||d.marque||"—"}${d.modele?" "+d.modele:""}</span>
+        <span class="etiquette-val">${escHtml(d.vehicule||d.marque||"—")}${d.modele?" "+d.modele:""}</span>
       </div>
       ${type!=="mecanique"&&d.vitrage?`<div class="etiquette-row">
         <span class="etiquette-label">Vitrage</span>
@@ -10448,8 +10513,8 @@ function imprimerEtiquetteVehicule(index, type){
     <div class="etiquette" style="width:55mm;border-style:dashed;">
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:900;color:#000;">N° ${d.numero}</div>
-        ${d.immat?`<div style="font-size:14px;font-weight:bold;letter-spacing:2px;margin:4px 0;">${d.immat}</div>`:""}
-        <div style="font-size:11px;color:#555;">${d.client||""}</div>
+        ${d.immat?`<div style="font-size:14px;font-weight:bold;letter-spacing:2px;margin:4px 0;">${escHtml(d.immat)}</div>`:""}
+        <div style="font-size:11px;color:#555;">${escHtml(d.client||"")}</div>
         <div style="font-size:10px;color:#888;">${e.nom||""} · ${new Date().toLocaleDateString("fr-FR")}</div>
       </div>
     </div>
@@ -10549,9 +10614,9 @@ function genererLettreRelance(type, index){
   <!-- Destinataire -->
   <div class="client-bloc">
     <div class="client-nom">${d.client || "—"}</div>
-    ${d.adresse ? `<div>${d.adresse}</div>` : ""}
-    ${d.telephone ? `<div>Tél : ${d.telephone}</div>` : ""}
-    ${d.email ? `<div>${d.email}</div>` : ""}
+    ${d.adresse ? `<div>${escHtml(d.adresse)}</div>` : ""}
+    ${d.telephone ? `<div>Tél : ${escHtml(d.telephone)}</div>` : ""}
+    ${d.email ? `<div>${escHtml(d.email)}</div>` : ""}
   </div>
 
   <!-- Références -->
