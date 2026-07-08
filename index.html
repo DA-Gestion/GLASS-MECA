@@ -953,59 +953,6 @@
       </div>
 
       <div class="card" style="margin-top:8px;">
-        <h2 style="color:#34d399;margin-bottom:14px;">🧮 Calculateur de devis rapide</h2>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Construisez un devis express, puis envoyez-le dans le formulaire ci-dessus.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end;">
-          <div style="flex:2;min-width:150px;">
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Désignation</label>
-            <input type="text" id="calcDesign" placeholder="Ex: MO freinage avant" style="width:100%;box-sizing:border-box;" onkeydown="if(event.key==='Enter') ajouterLigneCalc()">
-          </div>
-          <div style="width:60px;">
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Qté</label>
-            <input type="number" id="calcQte" value="1" min="0.5" step="0.5" style="width:100%;box-sizing:border-box;">
-          </div>
-          <div style="width:95px;">
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Prix HT (€)</label>
-            <input type="number" id="calcPrix" placeholder="0.00" step="0.01" style="width:100%;box-sizing:border-box;" onkeydown="if(event.key==='Enter') ajouterLigneCalc()">
-          </div>
-          <div style="width:75px;">
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">TVA %</label>
-            <select id="calcTVA" style="width:100%;box-sizing:border-box;">
-              <option value="20">20%</option><option value="10">10%</option><option value="5.5">5,5%</option><option value="0">0%</option>
-            </select>
-          </div>
-          <button onclick="ajouterLigneCalc()" class="btn-success">➕</button>
-        </div>
-        <div class="table-wrapper" style="margin-bottom:10px;">
-          <table>
-            <thead><tr>
-              <th>Désignation</th>
-              <th style="width:50px;text-align:center;">Qté</th>
-              <th style="width:95px;text-align:right;">PU HT</th>
-              <th style="width:55px;text-align:center;">TVA</th>
-              <th style="width:105px;text-align:right;">Total TTC</th>
-              <th style="width:36px;"></th>
-            </tr></thead>
-            <tbody id="calcLignes"></tbody>
-            <tfoot>
-              <tr style="background:#0f172a;font-weight:bold;">
-                <td colspan="2" style="padding:8px 10px;">TOTAL</td>
-                <td style="padding:8px;text-align:right;color:#94a3b8;font-size:12px;"><span id="calcTotalHT">0,00 €</span> HT</td>
-                <td style="padding:8px;text-align:center;color:#64748b;font-size:12px;"><span id="calcTotalTVA">0,00 €</span></td>
-                <td style="padding:8px;text-align:right;color:#34d399;font-size:14px;"><span id="calcTotalTTC">0,00 €</span></td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button onclick="envoyerCalcVersDevis()" class="btn-success">📤 Envoyer vers formulaire</button>
-          <button onclick="copierCalcTexte()" style="background:#334155;">📋 Copier texte</button>
-          <button onclick="viderCalc()" style="background:#7f1d1d;">🗑 Vider</button>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
           <h2 style="margin:0;color:#f59e0b;">🏭 Commandes de pièces</h2>
           <button onclick="ouvrirAjoutCommande()" class="btn-success">➕ Commande</button>

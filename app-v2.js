@@ -857,7 +857,7 @@ function showPage(pageId){
   if(pageId === "agenda")            { renderCalendrierRdv(); renderRendezVous(); renderCalendrierMensuel(); setTimeout(()=>{ renderPlanning(); }, 0); }
   if(pageId === "mecanique")         { setTimeout(()=>{ renderDossiersMecanique(); majCompteursMecanique(); remplirTarifsMecanique(); }, 0); }
   if(pageId === "dashboardMecanique"){ setTimeout(()=>{ renderDashboardMecanique(); }, 0); }
-  if(pageId === "devisFacture")      { setTimeout(()=>{ majNumeroDocument(); renderCatalogue(); renderCommandes(); majCompteursCmds(); renderCalc(); }, 100); }
+  if(pageId === "devisFacture")      { setTimeout(()=>{ majNumeroDocument(); renderCatalogue(); renderCommandes(); majCompteursCmds(); }, 100); }
   if(pageId === "relancesAssurance") { setTimeout(()=>{ initRelancesAssurance(); }, 0); }
   if(pageId === "stockPieces")       { setTimeout(()=>{ renderStock(); }, 0); }
   if(pageId === "dossiers")          { setTimeout(()=>{ renderDashboardVitrage(); }, 0); }
@@ -6420,14 +6420,23 @@ function supprimerTache(index){
 /* ── 1. CATALOGUE DE PRIX ── */
 
 let catalogueTarifs = JSON.parse(localStorage.getItem("catalogueTarifs")) || [
-  { id:1, designation:"Remplacement pare-brise (fourni)",        categorie:"Vitrage",    prixHT:180, tva:20, unite:"forfait" },
-  { id:2, designation:"Remplacement vitre latérale (fournie)",   categorie:"Vitrage",    prixHT:120, tva:20, unite:"forfait" },
-  { id:3, designation:"Main d'œuvre vitrage",                    categorie:"Vitrage",    prixHT:80,  tva:20, unite:"heure"   },
-  { id:4, designation:"Recalibrage caméra ADAS",                 categorie:"Vitrage",    prixHT:150, tva:20, unite:"forfait" },
-  { id:5, designation:"Vidange moteur + filtre huile",           categorie:"Mécanique",  prixHT:45,  tva:20, unite:"forfait" },
-  { id:6, designation:"Remplacement plaquettes avant (paire)",   categorie:"Mécanique",  prixHT:65,  tva:20, unite:"forfait" },
-  { id:7, designation:"Remplacement disques avant (paire)",      categorie:"Mécanique",  prixHT:90,  tva:20, unite:"forfait" },
-  { id:8, designation:"Courroie de distribution",                categorie:"Mécanique",  prixHT:280, tva:20, unite:"forfait" },
+  // ── VITRAGE ──
+  { id:1,  designation:"Remplacement pare-brise (fourni)",        categorie:"Vitrage",     prixHT:180, tva:20, unite:"forfait" },
+  { id:2,  designation:"Remplacement vitre latérale (fournie)",   categorie:"Vitrage",     prixHT:120, tva:20, unite:"forfait" },
+  { id:3,  designation:"Remplacement custode (fournie)",          categorie:"Vitrage",     prixHT:100, tva:20, unite:"forfait" },
+  { id:4,  designation:"Main d'œuvre vitrage",                    categorie:"Vitrage",     prixHT:60,  tva:20, unite:"heure"   },
+  { id:5,  designation:"Recalibrage caméra ADAS",                 categorie:"Vitrage",     prixHT:150, tva:20, unite:"forfait" },
+  { id:6,  designation:"Réparation impact pare-brise",            categorie:"Vitrage",     prixHT:35,  tva:20, unite:"forfait" },
+  // ── MAIN D'ŒUVRE ──
+  { id:7,  designation:"Main d'œuvre mécanique",                  categorie:"Main d'œuvre", prixHT:65, tva:20, unite:"heure"   },
+  { id:8,  designation:"Main d'œuvre carrosserie",                categorie:"Main d'œuvre", prixHT:55, tva:20, unite:"heure"   },
+  { id:9,  designation:"Forfait diagnostic électronique",         categorie:"Main d'œuvre", prixHT:60, tva:20, unite:"forfait" },
+  { id:10, designation:"Forfait contrôle + devis",                categorie:"Main d'œuvre", prixHT:25, tva:20, unite:"forfait" },
+  // ── MÉCANIQUE ──
+  { id:11, designation:"Vidange moteur + filtre huile",           categorie:"Mécanique",   prixHT:45,  tva:20, unite:"forfait" },
+  { id:12, designation:"Remplacement plaquettes avant (paire)",   categorie:"Mécanique",   prixHT:65,  tva:20, unite:"forfait" },
+  { id:13, designation:"Remplacement disques avant (paire)",      categorie:"Mécanique",   prixHT:90,  tva:20, unite:"forfait" },
+  { id:14, designation:"Courroie de distribution",                categorie:"Mécanique",   prixHT:280, tva:20, unite:"forfait" },
   { id:9, designation:"Main d'œuvre mécanique",                  categorie:"Mécanique",  prixHT:70,  tva:20, unite:"heure"   },
   { id:10, designation:"Diagnostic électronique",                categorie:"Électrique", prixHT:60,  tva:20, unite:"forfait" },
   { id:11, designation:"Remplacement batterie 12V",              categorie:"Électrique", prixHT:110, tva:20, unite:"forfait" },
@@ -6462,13 +6471,12 @@ function renderCatalogue(){
       <div style="font-size:14px;font-weight:bold;color:#f1f5f9;margin-bottom:8px;line-height:1.3;">${escHtml(t.designation)}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
         <div>
-          <span style="font-size:16px;font-weight:bold;color:#34d399;">${t.prixHT.toLocaleString("fr-FR",{minimumFractionDigits:2})} € HT</span>
+          <span style="font-size:18px;font-weight:900;color:#34d399;">${ttc.toLocaleString("fr-FR",{minimumFractionDigits:2})} € TTC</span>
           <span style="font-size:11px;color:#64748b;margin-left:4px;">/ ${escHtml(t.unite||"forfait")}</span><br>
-          <span style="font-size:12px;color:#94a3b8;">TTC : ${ttc.toLocaleString("fr-FR",{minimumFractionDigits:2})} € (TVA ${t.tva}%)</span>
+          <span style="font-size:11px;color:#64748b;">(HT : ${t.prixHT.toLocaleString("fr-FR",{minimumFractionDigits:2})} € — TVA ${t.tva}%)</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <button onclick="ajouterTarifAuDevis(${idx})" class="btn-success" style="font-size:12px;padding:5px 10px;">➕ Au devis</button>
-          <button onclick="ajouterTarifAuCalc(${idx})"  style="background:#334155;font-size:12px;padding:5px 10px;">🧮 Au calc.</button>
+          <button onclick="ajouterTarifAuDevis(${idx})" class="btn-success" style="font-size:13px;padding:8px 14px;width:100%;">➕ Ajouter au devis</button>
         </div>
       </div>
       <div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;">
@@ -6483,19 +6491,22 @@ function ajouterTarifAuDevis(idx){
   const t = catalogueTarifs[idx];
   if(!t) return;
   if(typeof lignesDocument === "undefined"){ toast("Erreur : lignesDocument introuvable","error"); return; }
-  lignesDocument.push({ design: t.designation, qte: 1, prixHT: t.prixHT, tva: t.tva });
+  const prixTTC = t.prixHT * (1 + (t.tva||20)/100);
+  lignesDocument.push({
+    designation: t.designation,
+    type: "produit",
+    qte:  1,
+    prixHT:  t.prixHT,
+    tva:     t.tva || 20,
+    prixTTC: prixTTC
+  });
   if(typeof renderLignes==="function") renderLignes();
+  // Scroll vers le tableau
   document.getElementById("tableauLignes")?.scrollIntoView({behavior:"smooth", block:"center"});
-  toast(`"${t.designation}" ajouté au formulaire ✓`);
+  toast(`✅ "${t.designation}" ajouté — ${prixTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} € TTC`);
 }
 
-function ajouterTarifAuCalc(idx){
-  const t = catalogueTarifs[idx];
-  if(!t) return;
-  _calcLignes.push({ designation: t.designation, qte: 1, prixHT: t.prixHT, tva: t.tva });
-  renderCalc();
-  toast(`"${t.designation}" ajouté au calculateur ✓`);
-}
+
 
 function ouvrirAjoutTarif(index){
   const estEdit = index !== undefined && catalogueTarifs[index];
@@ -6558,87 +6569,6 @@ function supprimerTarif(idx){
     saveCatalogue();
     renderCatalogue();
     toast("Tarif supprimé");
-}
-
-/* ── 2. CALCULATEUR DE DEVIS RAPIDE ── */
-
-let _calcLignes = [];
-
-function ajouterLigneCalc(){
-  const design = document.getElementById("calcDesign")?.value.trim();
-  const qte    = parseFloat(document.getElementById("calcQte")?.value||"1");
-  const prix   = parseFloat(document.getElementById("calcPrix")?.value||"0");
-  const tva    = parseFloat(document.getElementById("calcTVA")?.value||"20");
-  if(!design){ toast("Désignation obligatoire","error"); return; }
-  if(!prix || prix <= 0){ toast("Prix obligatoire","error"); return; }
-  _calcLignes.push({ designation: design, qte, prixHT: prix, tva });
-  document.getElementById("calcDesign").value = "";
-  document.getElementById("calcPrix").value   = "";
-  document.getElementById("calcQte").value    = "1";
-  renderCalc();
-  document.getElementById("calcDesign")?.focus();
-}
-
-function renderCalc(){
-  const tbody = document.getElementById("calcLignes");
-  if(!tbody) return;
-  let totalHT = 0, totalTVA = 0;
-
-  if(_calcLignes.length === 0){
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;padding:16px;">Aucune ligne — ajoutez des prestations ci-dessus</td></tr>`;
-  } else {
-    tbody.innerHTML = _calcLignes.map((l,i)=>{
-      const ht  = l.qte * l.prixHT;
-      const tva = ht * (l.tva/100);
-      totalHT  += ht;
-      totalTVA += tva;
-      return `<tr>
-        <td>${escHtml(l.designation)}</td>
-        <td style="text-align:center;">${l.qte}</td>
-        <td style="text-align:right;">${l.prixHT.toLocaleString("fr-FR",{minimumFractionDigits:2})} €</td>
-        <td style="text-align:center;color:#94a3b8;">${l.tva}%</td>
-        <td style="text-align:right;font-weight:bold;">${(ht+tva).toLocaleString("fr-FR",{minimumFractionDigits:2})} €</td>
-        <td><button onclick="_calcLignes.splice(${i},1);renderCalc()" class="delete-btn" style="padding:3px 7px;font-size:11px;">✖</button></td>
-      </tr>`;
-    }).join("");
-  }
-
-  const fmt = v => v.toLocaleString("fr-FR",{minimumFractionDigits:2}) + " €";
-  const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
-  set("calcTotalHT",  fmt(totalHT));
-  set("calcTotalTVA", fmt(totalTVA));
-  set("calcTotalTTC", fmt(totalHT+totalTVA));
-}
-
-function viderCalc(){
-  confirmerAction("Vider toutes les lignes du calculateur ?", ()=>{
-    _calcLignes = [];
-    renderCalc();
-    toast("Calculateur vidé");
-  });
-}
-
-function envoyerCalcVersDevis(){
-  if(_calcLignes.length === 0){ toast("Aucune ligne à envoyer","error"); return; }
-  if(typeof lignesDocument === "undefined"){ toast("Module Devis/Factures indisponible","error"); return; }
-  lignesDocument = _calcLignes.map(l=>({ design: l.designation, qte: l.qte, prixHT: l.prixHT, tva: l.tva }));
-  if(typeof renderLignes==="function") renderLignes();
-  // Scroll vers le formulaire de devis
-  document.getElementById("tableauLignes")?.scrollIntoView({behavior:"smooth", block:"center"});
-  toast(`${_calcLignes.length} ligne(s) envoyée(s) dans le formulaire ✓`);
-}
-
-function copierCalcTexte(){
-  if(_calcLignes.length === 0){ toast("Aucune ligne à copier","error"); return; }
-  const lignes = _calcLignes.map(l=>{
-    const ttc = (l.qte * l.prixHT * (1 + l.tva/100));
-    return `${l.designation} — ${l.qte} x ${l.prixHT.toFixed(2)} € HT = ${ttc.toFixed(2)} € TTC`;
-  });
-  const totalTTC = _calcLignes.reduce((a,l)=>a+l.qte*l.prixHT*(1+l.tva/100),0);
-  lignes.push(`\nTOTAL TTC : ${totalTTC.toFixed(2)} €`);
-  navigator.clipboard.writeText(lignes.join("\n"))
-    .then(()=>toast("Devis copié dans le presse-papier ✓"))
-    .catch(()=>toast("Copie non disponible","error"));
 }
 
 /* ── 3. COMMANDES FOURNISSEURS ── */
