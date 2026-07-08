@@ -859,22 +859,14 @@
       <!-- Lignes produits -->
       <div class="card" style="margin-bottom:16px;">
         <h2>📦 Lignes de facturation</h2>
-        <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:10px;">
-          <input type="text" id="ligneDesignation" placeholder="Désignation">
-          <select id="ligneType">
-            <option value="produit">Pièce / Produit</option>
-            <option value="mo">Main d'œuvre</option>
-          </select>
-          <input type="number" id="ligneQte" placeholder="Qté" min="1" value="1">
-          <input type="number" id="lignePrixHT" placeholder="Prix unit. HT (€)" step="0.01">
-          <select id="ligneTVA">
-            <option value="20">TVA 20%</option>
-            <option value="10">TVA 10%</option>
-            <option value="5.5">TVA 5.5%</option>
-            <option value="0">TVA 0%</option>
-          </select>
-          <button onclick="ajouterLigne()">➕</button>
-          <button onclick="ouvrirTMO()" style="background:#7c3aed;" title="Importer temps Autossimo">⏱ TMO</button>
+        <div style="display:grid;grid-template-columns:3fr 80px 120px auto;gap:8px;margin-bottom:10px;align-items:center;">
+          <input type="text" id="ligneDesignation" placeholder="Désignation / prestation"
+            onkeydown="if(event.key==='Enter') ajouterLigne()">
+          <input type="number" id="ligneQte" placeholder="Qté" min="1" value="1" style="text-align:center;"
+            onkeydown="if(event.key==='Enter') ajouterLigne()">
+          <input type="number" id="lignePrixTTC" placeholder="Prix TTC (€)" step="0.01"
+            onkeydown="if(event.key==='Enter') ajouterLigne()">
+          <button onclick="ajouterLigne()" class="btn-success" style="padding:10px 16px;font-size:18px;font-weight:900;">+</button>
         </div>
 
         <div class="table-wrapper">
@@ -882,31 +874,18 @@
             <thead>
               <tr>
                 <th>Désignation</th>
-                <th>Type</th>
-                <th>Qté</th>
-                <th>PU HT</th>
-                <th>TVA</th>
-                <th>Total HT</th>
-                <th>Total TTC</th>
+                <th style="text-align:center;">Qté</th>
+                <th style="text-align:right;">Prix unit. TTC</th>
+                <th style="text-align:right;">Total TTC</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="lignesDocument"></tbody>
             <tfoot>
-              <tr style="background:#0f172a;font-weight:bold;">
-                <td colspan="5" style="text-align:right;padding:12px 16px;">Total HT</td>
-                <td id="totalHT" style="padding:12px 16px;">0,00 €</td>
-                <td></td><td></td>
-              </tr>
-              <tr style="background:#0f172a;font-weight:bold;">
-                <td colspan="5" style="text-align:right;padding:12px 16px;">TVA</td>
-                <td id="totalTVA" style="padding:12px 16px;">0,00 €</td>
-                <td></td><td></td>
-              </tr>
-              <tr style="background:#0f172a;font-weight:bold;font-size:16px;color:#38bdf8;">
-                <td colspan="5" style="text-align:right;padding:12px 16px;">Total TTC</td>
-                <td id="totalTTC" style="padding:12px 16px;">0,00 €</td>
-                <td></td><td></td>
+              <tr style="background:#0f172a;font-weight:900;font-size:17px;color:#38bdf8;">
+                <td colspan="3" style="text-align:right;padding:14px 16px;">Total TTC</td>
+                <td id="totalTTC" style="padding:14px 16px;color:#38bdf8;">0,00 €</td>
+                <td></td>
               </tr>
             </tfoot>
           </table>

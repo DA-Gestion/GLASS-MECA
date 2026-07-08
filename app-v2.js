@@ -2825,20 +2825,23 @@ setInterval(function(){
 let lignesDocument = [];
 
 function ajouterLigne(){
-  const designation = document.getElementById("ligneDesignation").value.trim();
-  const type        = document.getElementById("ligneType").value;
-  const qte         = parseFloat(document.getElementById("ligneQte").value) || 1;
-  const prixHT      = parseFloat(document.getElementById("lignePrixHT").value) || 0;
-  const tva         = parseFloat(document.getElementById("ligneTVA").value) || 20;
+  const designation = document.getElementById("ligneDesignation")?.value.trim();
+  const qte         = parseFloat(document.getElementById("ligneQte")?.value) || 1;
+  const prixTTC     = parseFloat(document.getElementById("lignePrixTTC")?.value) || 0;
 
   if(!designation){ toast("Saisissez une désignation", "error"); return; }
+  if(!prixTTC)    { toast("Saisissez un prix TTC", "error"); return; }
 
-  lignesDocument.push({ designation, type, qte, prixHT, tva });
+  // Conserver compatibilité avec l'ancien format (prixHT = prixTTC / 1.2, tva = 20%)
+  const prixHT = prixTTC / 1.20;
+  const tva    = 20;
+  lignesDocument.push({ designation, type:"produit", qte, prixHT, tva, prixTTC });
   renderLignes();
 
   document.getElementById("ligneDesignation").value = "";
   document.getElementById("ligneQte").value = "1";
-  document.getElementById("lignePrixHT").value = "";
+  document.getElementById("lignePrixTTC").value = "";
+  document.getElementById("ligneDesignation").focus();
 }
 
 function supprimerLigne(i){
@@ -2850,30 +2853,28 @@ function renderLignes(){
   const tbody = document.getElementById("lignesDocument");
   if(!tbody) return;
 
-  let totalHT  = 0;
-  let totalTVA = 0;
+  let totalTTC = 0;
 
   tbody.innerHTML = lignesDocument.map((l, i)=>{
-    const ht  = l.qte * l.prixHT;
-    const tvaAmt = ht * l.tva / 100;
-    const ttc = ht + tvaAmt;
-    totalHT  += ht;
-    totalTVA += tvaAmt;
-    return `<tr class="ligne-${l.type}">
+    // Calculer TTC — utiliser prixTTC direct si dispo, sinon recalculer
+    const puTTC  = l.prixTTC || (l.prixHT * (1 + (l.tva||20)/100));
+    const ligTTC = puTTC * l.qte;
+    totalTTC += ligTTC;
+    const fmt2 = n => n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2});
+    return `<tr>
       <td>${escHtml(l.designation)}</td>
-      <td>${l.type === "mo" ? "Main d'œuvre" : "Produit"}</td>
-      <td>${l.qte}</td>
-      <td>${l.prixHT.toFixed(2)} €</td>
-      <td>${l.tva} %</td>
-      <td>${ht.toFixed(2)} €</td>
-      <td><b>${ttc.toFixed(2)} €</b></td>
-      <td><button class="delete-btn" onclick="supprimerLigne(${i})" style="padding:4px 8px;">🗑</button></td>
+      <td style="text-align:center;">${l.qte}</td>
+      <td style="text-align:right;">${fmt2(puTTC)} €</td>
+      <td style="text-align:right;font-weight:700;">${fmt2(ligTTC)} €</td>
+      <td><button class="delete-btn" onclick="supprimerLigne(${i})" style="padding:3px 8px;">🗑</button></td>
     </tr>`;
   }).join("");
 
-  const totalTTC = totalHT + totalTVA;
   const fmt = n => n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
   const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  // Garder compatibilité avec les anciens champs HT/TVA s'ils existent encore
+  const totalHT  = totalTTC / 1.20;
+  const totalTVA = totalTTC - totalHT;
   setEl("totalHT",  fmt(totalHT));
   setEl("totalTVA", fmt(totalTVA));
   setEl("totalTTC", fmt(totalTTC));
@@ -7403,122 +7404,6 @@ function copierSMSPressePapier(){
   navigator.clipboard.writeText(msg).then(()=>toast("Message copié ✓")).catch(()=>toast("Copie non disponible","error"));
 }
 
-/* =====================================================================
-   MODULE TMO — IMPORT AUTOSSIMO
-===================================================================== */
-
-function ouvrirTMO(){
-  ouvrirModal("⏱ Importer temps Autossimo (TMO)",
-    `<div style="display:flex;flex-direction:column;gap:14px;">
-      <div style="background:#1e293b;border-radius:8px;padding:12px;font-size:13px;color:#94a3b8;line-height:1.8;">
-        <b style="color:#a78bfa;">Comment utiliser :</b><br>
-        1. Allez sur <b>Autossimo</b> → recherchez votre véhicule<br>
-        2. Sélectionnez les opérations (ex: freins, vidange...)<br>
-        3. Copiez le tableau de résultats (Ctrl+A → Ctrl+C)<br>
-        4. Collez dans la zone ci-dessous → Cliquez <b>Importer</b>
-      </div>
-      <div>
-        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">Données copiées depuis Autossimo :</label>
-        <textarea id="tmoData" rows="8" placeholder="Collez ici les données Autossimo (Ctrl+V)..." style="width:100%;box-sizing:border-box;resize:vertical;font-family:monospace;font-size:12px;"></textarea>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <div>
-          <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">Taux MO HT (€/h)</label>
-          <input type="number" id="tmoTauxMO" value="65" step="0.5" style="width:90px;box-sizing:border-box;">
-        </div>
-        <div>
-          <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">Majoration pièces (%)</label>
-          <input type="number" id="tmoMajoPieces" value="30" step="1" style="width:90px;box-sizing:border-box;">
-        </div>
-      </div>
-      <div id="tmoApercu" style="min-height:20px;font-size:13px;"></div>
-    </div>`,
-    function(){
-      const data    = document.getElementById("tmoData")?.value.trim()||"";
-      const tauxMO  = parseFloat(document.getElementById("tmoTauxMO")?.value||"65");
-      const majo    = parseFloat(document.getElementById("tmoMajoPieces")?.value||"30")/100;
-      if(!data){ toast("Collez les données Autossimo","error"); return false; }
-      const lignes = parserAutossimo(data, tauxMO, majo);
-      if(lignes.length === 0){ toast("Aucune ligne reconnue — vérifiez le format","error"); return false; }
-      lignes.forEach(l => lignesDocument.push(l));
-      if(typeof renderLignes==="function") renderLignes();
-      toast(`${lignes.length} ligne(s) importée(s) depuis Autossimo ✓`);
-    }
-  );
-
-  // Aperçu en temps réel
-  setTimeout(()=>{
-    const ta = document.getElementById("tmoData");
-    if(ta) ta.addEventListener("input", ()=>{
-      const tauxMO = parseFloat(document.getElementById("tmoTauxMO")?.value||"65");
-      const majo   = parseFloat(document.getElementById("tmoMajoPieces")?.value||"30")/100;
-      const lignes = parserAutossimo(ta.value, tauxMO, majo);
-      const zone   = document.getElementById("tmoApercu");
-      if(!zone) return;
-      if(lignes.length === 0){ zone.innerHTML=""; return; }
-      zone.innerHTML = `<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e293b;">
-        <b style="color:#a78bfa;font-size:12px;">Aperçu — ${lignes.length} ligne(s) détectée(s) :</b>
-        <ul style="margin:6px 0 0 16px;color:#94a3b8;font-size:12px;line-height:1.8;">
-          ${lignes.map(l=>`<li>${escHtml(l.designation)} — ${l.qte} × ${l.prixHT.toFixed(2)} € HT</li>`).join("")}
-        </ul>
-        <div style="margin-top:6px;color:#34d399;font-weight:bold;font-size:13px;">
-          Total HT : ${lignes.reduce((a,l)=>a+l.qte*l.prixHT,0).toFixed(2)} €
-        </div>
-      </div>`;
-    });
-  }, 100);
-}
-
-function parserAutossimo(texte, tauxMO, majoPieces){
-  const lignes = [];
-  const lines  = texte.split("\n").map(l=>l.trim()).filter(l=>l.length>3);
-
-  lines.forEach(line => {
-    // Format typique Autossimo : "Désignation opération\t2,5\th\tPrix pièce"
-    // Ou : "Freinage avant\t1.5\t\t45.00"
-    const parts = line.split(/\t+/);
-
-    if(parts.length >= 2){
-      const designation = parts[0].replace(/\s+/g," ").trim();
-      const tempsStr    = parts[1]?.replace(",",".").trim();
-      const temps       = parseFloat(tempsStr);
-      const prixPiece   = parseFloat((parts[3]||parts[2]||"0").replace(",",".").replace(/[^\d.]/g,""))||0;
-
-      if(!designation || designation.length < 3) return;
-      if(isNaN(temps) || temps <= 0){
-        // Ligne pièce sans temps
-        if(prixPiece > 0){
-          lignes.push({ designation, qte:1, prixHT: prixPiece*(1+majoPieces), tva:20 });
-        }
-        return;
-      }
-
-      // Ligne main d'œuvre
-      lignes.push({ designation: `MO — ${designation}`, qte: temps, prixHT: tauxMO, tva:20 });
-      // Si pièce associée
-      if(prixPiece > 0){
-        lignes.push({ designation: `Pièce — ${designation}`, qte:1, prixHT: prixPiece*(1+majoPieces), tva:20 });
-      }
-      return;
-    }
-
-    // Format ligne simple : "Vidange + filtre huile — 1h30 — 45€"
-    const matchTemps = line.match(/(\d+[,.]?\d*)\s*h/i);
-    const matchPrix  = line.match(/(\d+[,.]?\d*)\s*[€e]/i);
-    const designation = line.replace(/\d+[,.]?\d*\s*h.*/i,"").replace(/\d+[,.]?\d*\s*[€e].*/i,"").trim();
-
-    if(matchTemps && designation.length > 2){
-      const temps = parseFloat(matchTemps[1].replace(",","."));
-      lignes.push({ designation: `MO — ${designation}`, qte: temps, prixHT: tauxMO, tva:20 });
-      if(matchPrix){
-        const prix = parseFloat(matchPrix[1].replace(",","."));
-        if(prix > 0) lignes.push({ designation: `Pièce — ${designation}`, qte:1, prixHT: prix*(1+majoPieces), tva:20 });
-      }
-    }
-  });
-
-  return lignes;
-}
 
 /* =====================================================================
    MODULE SIGNATURE ÉLECTRONIQUE DEVIS
