@@ -2848,7 +2848,8 @@ function ajouterLigne(){
   // Conserver compatibilité avec l'ancien format (prixHT = prixTTC / 1.2, tva = 20%)
   const prixHT = prixTTC / 1.20;
   const tva    = 20;
-  lignesDocument.push({ designation, type:"produit", qte, prixHT, tva, prixTTC });
+  const type   = document.getElementById("ligneType")?.value || "piece";
+  lignesDocument.push({ designation, type, qte, prixHT, tva, prixTTC });
   renderLignes();
 
   document.getElementById("ligneDesignation").value = "";
@@ -2874,8 +2875,10 @@ function renderLignes(){
     const ligTTC = puTTC * l.qte;
     totalTTC += ligTTC;
     const fmt2 = n => n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2});
+    const typeLbl = l.type === "mo" ? "🔧 M.O." : "🔩 Pièce";
     return `<tr>
       <td>${escHtml(l.designation)}</td>
+      <td style="text-align:center;font-size:12px;color:#94a3b8;">${typeLbl}</td>
       <td style="text-align:center;">${l.qte}</td>
       <td style="text-align:right;">${fmt2(puTTC)} €</td>
       <td style="text-align:right;font-weight:700;">${fmt2(ligTTC)} €</td>
@@ -6492,9 +6495,10 @@ function ajouterTarifAuDevis(idx){
   if(!t) return;
   if(typeof lignesDocument === "undefined"){ toast("Erreur : lignesDocument introuvable","error"); return; }
   const prixTTC = t.prixHT * (1 + (t.tva||20)/100);
+  const estMO = /main d.œuvre|main d'oeuvre|m\.o\.|forfait diagnostic|forfait contrôle/i.test(t.designation) || t.categorie === "Main d'œuvre" || t.unite === "heure";
   lignesDocument.push({
     designation: t.designation,
-    type: "produit",
+    type: estMO ? "mo" : "piece",
     qte:  1,
     prixHT:  t.prixHT,
     tva:     t.tva || 20,

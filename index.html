@@ -859,9 +859,13 @@
       <!-- Lignes produits -->
       <div class="card" style="margin-bottom:16px;">
         <h2>📦 Lignes de facturation</h2>
-        <div style="display:grid;grid-template-columns:3fr 80px 120px auto;gap:8px;margin-bottom:10px;align-items:center;">
+        <div style="display:grid;grid-template-columns:3fr 160px 80px 120px auto;gap:8px;margin-bottom:10px;align-items:center;">
           <input type="text" id="ligneDesignation" placeholder="Désignation / prestation"
             onkeydown="if(event.key==='Enter') ajouterLigne()">
+          <select id="ligneType">
+            <option value="piece">🔩 Pièce</option>
+            <option value="mo">🔧 Main d'œuvre</option>
+          </select>
           <input type="number" id="ligneQte" placeholder="Qté" min="1" value="1" style="text-align:center;"
             onkeydown="if(event.key==='Enter') ajouterLigne()">
           <input type="number" id="lignePrixTTC" placeholder="Prix TTC (€)" step="0.01"
@@ -874,6 +878,7 @@
             <thead>
               <tr>
                 <th>Désignation</th>
+                <th style="text-align:center;">Type</th>
                 <th style="text-align:center;">Qté</th>
                 <th style="text-align:right;">Prix unit. TTC</th>
                 <th style="text-align:right;">Total TTC</th>
@@ -883,7 +888,7 @@
             <tbody id="lignesDocument"></tbody>
             <tfoot>
               <tr style="background:#0f172a;font-weight:900;font-size:17px;color:#38bdf8;">
-                <td colspan="3" style="text-align:right;padding:14px 16px;">Total TTC</td>
+                <td colspan="4" style="text-align:right;padding:14px 16px;">Total TTC</td>
                 <td id="totalTTC" style="padding:14px 16px;color:#38bdf8;">0,00 €</td>
                 <td></td>
               </tr>
