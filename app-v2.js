@@ -9788,11 +9788,17 @@ function copierLienPartage(){
 }
 
 function changerDeGarage(){
-  const newId = document.getElementById("nouveauGarageId")?.value.trim();
-  if(!newId || !/^[a-zA-Z0-9_-]{4,32}$/.test(newId)){
-    toast("Identifiant invalide (4-32 caractères alphanumériques)","error");
+  let newId = document.getElementById("nouveauGarageId")?.value.trim() || "";
+  // Normaliser automatiquement : minuscules, accents retirés, caractères invalides supprimés
+  newId = newId.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // é→e, à→a...
+    .replace(/[^a-z0-9_-]/g, "");                          // retirer /, espaces, etc.
+  if(newId.length < 4 || newId.length > 32){
+    toast("Identifiant trop court après nettoyage : \"" + newId + "\" (minimum 4 caractères)","error");
     return;
   }
+  // Afficher l'identifiant nettoyé si différent de la saisie
+  document.getElementById("nouveauGarageId").value = newId;
   if(!window.confirm(`Basculer vers le garage "${newId}" ?\n\nVos données actuelles ne sont pas perdues, elles restent dans votre espace Firebase.`)) return;
   localStorage.setItem("garageId", newId);
   toast("Changement de garage — Rechargement...");
@@ -9937,7 +9943,7 @@ function renderDashboardVitrage(){
             </div>`;
           }).join("")}
         </div>
-      </div>` : `<div style="background:#14532d;border-radius:8px;padding:12px;text-align:center;font-size:13px;color:#86efac;">✅ Aucune facture impayée</div>`}
+      </div>` : ""}
     </div>`;
 }
 
