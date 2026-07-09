@@ -1,0 +1,22 @@
+{
+  "name": "DA-Gestion — Garage GlassMéca",
+  "short_name": "DA-Gestion",
+  "description": "Gestion de garage vitrage et mécanique",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#070c14",
+  "theme_color": "#070c14",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

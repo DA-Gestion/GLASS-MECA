@@ -2,6 +2,9 @@
 <html lang="fr">
 
 <head>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#070c14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta charset="UTF-8">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -86,6 +89,9 @@
       <div class="nav-section-label">⚙ PARAMÈTRES</div>
       <a href="#" onclick="ouvrirGestionCompte();return false;">⚙️ Mon compte garage</a>
       <a href="#" onclick="ouvrirPersonnalisationCouleurs();return false;">🎨 Couleurs interface</a>
+      <a href="#" onclick="ouvrirCorbeille();return false;">🗑 Corbeille</a>
+      <a href="#" onclick="exporterJournalVentes();return false;">📊 Journal des ventes</a>
+      <a href="#" id="btnInstallerApp" onclick="installerApplication();return false;" style="display:none;color:#34d399;">📲 Installer l'application</a>
       <a href="#" onclick="showPage('entreprise');setActive(this)">🏢 Mon entreprise</a>
       <a href="#" id="btnTheme" onclick="toggleTheme();return false;">☀️ Mode clair</a>
       <a href="#" onclick="exporterExcelGlobal();return false;">📊 Export Excel</a>
@@ -485,7 +491,7 @@
 
         <input type="text" id="modeleDossier" placeholder="Modèle">
 
-        <input type="text" id="immatDossier" placeholder="Immatriculation">
+        <div style="display:flex;gap:4px;"><input type="text" id="immatDossier" placeholder="Immatriculation" style="flex:1;"><button onclick="scannerPlaque('immatDossier')" style="background:#7c3aed;padding:8px 10px;" title="Scanner la plaque">📷</button></div>
 
         <input type="text" id="telephoneDossier" placeholder="Téléphone">
         <input type="email" id="emailClient" placeholder="📧 Email client">
@@ -679,6 +685,10 @@
 
     <!-- AGENDA -->
     <section id="agenda" class="page hidden">
+      <div style="margin-bottom:12px;">
+        <button id="btnVueAgenda" onclick="toggleVueAgenda()" style="background:#0891b2;">📅 Vue semaine</button>
+      </div>
+      <div id="agendaSemaine" style="display:none;margin-bottom:16px;background:#1e293b;border-radius:12px;padding:14px;"></div>
 
       <h2>📅 Rendez-vous</h2>
 
@@ -1100,7 +1110,7 @@
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:0;">
           <input type="text" id="mec_client"       placeholder="👤 Client *">
           <input type="text" id="mec_telephone"    placeholder="📞 Téléphone">
-          <input type="text" id="mec_immat"        placeholder="🚗 Immatriculation" style="text-transform:uppercase;">
+          <div style="display:flex;gap:4px;"><input type="text" id="mec_immat" placeholder="🚗 Immatriculation" style="text-transform:uppercase;flex:1;"><button onclick="scannerPlaque('mec_immat')" style="background:#7c3aed;padding:8px 10px;" title="Scanner la plaque">📷</button></div>
           <input type="text" id="mec_vehicule"     placeholder="Marque / Modèle">
           <input type="text" id="mec_kilometrage"  placeholder="Kilométrage (km)">
 

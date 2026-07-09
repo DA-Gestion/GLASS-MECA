@@ -459,7 +459,7 @@ function ecouterChangementsFirebase(){
   });
 }
 
-async function sauvegarderFirebase(){
+async function _sauvegarderFirebaseCore(){
   if(!db || !_firebaseActif) return;
   _syncEnCours = true;
   try {
@@ -1595,13 +1595,14 @@ function supprimerDossier(index, ev){
   if(btn){
     // Si confirmation déjà affichée, exécuter
     if(btn.dataset.confirming === "1"){
+      mettreALaCorbeille(dossiers[index], "vitrage");
       dossiers.splice(index, 1);
       saveData();
       renderDossiers();
       renderDossiersRecent();
       chargerDossiersSelect();
       majDashboard();
-      toast("Dossier supprimé ✓");
+      toast("Dossier supprimé ✓ (récupérable dans la corbeille 30j)");
       return;
     }
     // Sinon demander confirmation visuelle
@@ -3145,7 +3146,8 @@ function majNumeroDocument(){
 
 
 function supprimerDocument(i){
-  if(!window.confirm("Supprimer ce document ?\nCette action est irréversible.")) return;
+  if(!window.confirm("Supprimer ce document ?\n(Récupérable dans la corbeille pendant 30 jours)")) return;
+  mettreALaCorbeille(documents[i], "document");
   documents.splice(i, 1);
     localStorage.setItem("documents", JSON.stringify(documents));
     renderDocuments();
@@ -3372,8 +3374,10 @@ function renderDocuments(){
       <td style="text-align:center;">${margeHtml}</td>
       <td>${reglHtml}</td>
       <td style="white-space:nowrap;">
-        <button onclick="chargerDocument(${i})" style="font-size:12px;padding:4px 8px;">✏️</button>
-        <button onclick="genererPdfDocumentSaved(${i})" style="font-size:12px;padding:4px 8px;">📄</button>
+        <button onclick="chargerDocument(${i})" style="font-size:12px;padding:4px 8px;" title="Modifier">✏️</button>
+        <button onclick="genererPdfDocumentSaved(${i})" style="font-size:12px;padding:4px 8px;" title="PDF">📄</button>
+        <button onclick="dupliquerDocument(${i})" style="font-size:12px;padding:4px 8px;background:#0891b2;" title="Dupliquer">📋</button>
+        <button onclick="envoyerDocumentSMS(${i})" style="font-size:12px;padding:4px 8px;background:#16a34a;" title="Envoyer par SMS">📱</button>
         ${doc.type==="or" ? `<button onclick="imprimerOR(${i})" style="background:#7c3aed;font-size:12px;padding:4px 8px;">🖨️ OR</button>` : ""}
         <button onclick="ouvrirRattachementDossier(${i})" style="background:#7c3aed;font-size:12px;padding:4px 8px;">📂</button>
         <button class="delete-btn" onclick="supprimerDocument(${i})" style="font-size:12px;padding:4px 8px;">🗑</button>
@@ -3823,11 +3827,12 @@ function supprimerDossierMecanique(index, ev){
   const btn = (ev||window.event)?.target || document.querySelector(`[onclick*="supprimerDossierMecanique(${index})"]`);
   if(btn){
     if(btn.dataset.confirming === "1"){
+      mettreALaCorbeille(dossiersMecanique[index], "mecanique");
       dossiersMecanique.splice(index, 1);
       saveData();
       renderDossiersMecanique();
       majCompteursMecanique();
-      toast("Dossier supprimé ✓");
+      toast("Dossier supprimé ✓ (récupérable dans la corbeille 30j)");
       return;
     }
     btn.dataset.confirming = "1";
@@ -9218,12 +9223,11 @@ function afficherStatutFirebase(){
   alert(msg);
 }
 
-// Brancher sur les événements Firebase existants
-const _origSauvegarderFirebase = sauvegarderFirebase;
+// Wrapper avec indicateur visuel (appelle le cœur Firebase)
 async function sauvegarderFirebase(){
   majIndicateurFirebase("sync");
   try {
-    await _origSauvegarderFirebase();
+    await _sauvegarderFirebaseCore();
     majIndicateurFirebase("connecte");
   } catch(e){
     majIndicateurFirebase("erreur");
@@ -9736,7 +9740,11 @@ function ouvrirGestionCompte(){
           <input type="text" id="nouveauGarageId" placeholder="Ex: mongarage_abc123"
             style="flex:1;font-family:monospace;font-size:13px;">
           <button onclick="changerDeGarage()" style="background:#f59e0b;color:#000;white-space:nowrap;">➡️ Accéder</button>
+          <button onclick="renommerGarage()" style="background:#7c3aed;white-space:nowrap;" title="Déplace toutes vos données vers ce nouvel identifiant">✏️ Renommer</button>
         </div>
+        <p style="font-size:11px;color:#64748b;margin:6px 0 0 0;">
+          <b>Accéder</b> : basculer vers un autre garage · <b>Renommer</b> : déplacer VOS données vers ce nouvel identifiant
+        </p>
       </div>
 
       <!-- Statistiques du compte -->
@@ -10780,3 +10788,305 @@ function appliquerRestrictionsMenu(){
   }
 }
 
+
+/* =====================================================================
+   AMÉLIORATIONS v3 — 12 MODULES
+===================================================================== */
+
+/* ── 1. RENOMMER LE GARAGE AVEC MIGRATION DES DONNÉES ── */
+async function renommerGarage(){
+  let newId = document.getElementById("nouveauGarageId")?.value.trim() || "";
+  newId = newId.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9_-]/g,"");
+  if(newId.length < 4 || newId.length > 32){ toast("Identifiant invalide après nettoyage (min 4 caractères)","error"); return; }
+
+  const oldId = _getGarageId();
+  if(newId === oldId){ toast("C'est déjà votre identifiant actuel","error"); return; }
+  if(!db || !_firebaseActif){ toast("Firebase non connecté — migration impossible","error"); return; }
+
+  if(!window.confirm(`Renommer le garage ?\n\n${oldId} → ${newId}\n\nToutes vos données seront déplacées vers le nouvel identifiant.`)) return;
+
+  try {
+    toast("Migration en cours...");
+    const snap = await db.ref("/garages/" + oldId).get();
+    if(!snap.exists()){ toast("Aucune donnée à migrer","error"); return; }
+    // Vérifier que la destination est vide
+    const destSnap = await db.ref("/garages/" + newId).get();
+    if(destSnap.exists() && !window.confirm(`⚠️ L'identifiant "${newId}" contient déjà des données.\nÉCRASER ces données ?`)) return;
+    await db.ref("/garages/" + newId).set(snap.val());
+    await db.ref("/garages/" + oldId).remove();
+    localStorage.setItem("garageId", newId);
+    toast("✅ Garage renommé — rechargement...");
+    setTimeout(()=>window.location.reload(), 1500);
+  } catch(e){
+    toast("Erreur migration : " + e.message, "error");
+  }
+}
+
+/* ── 2. SAUVEGARDE AUTOMATIQUE HEBDOMADAIRE ── */
+function verifierSauvegardeAuto(){
+  const derniere = parseInt(localStorage.getItem("derniereSauvegardeAuto") || "0");
+  const septJours = 7 * 24 * 3600 * 1000;
+  if(Date.now() - derniere > septJours && (dossiers.length > 0 || (typeof dossiersMecanique !== "undefined" && dossiersMecanique.length > 0))){
+    setTimeout(()=>{
+      if(window.confirm("💾 Sauvegarde hebdomadaire\n\nCela fait plus de 7 jours depuis votre dernière sauvegarde automatique.\nTélécharger une sauvegarde complète maintenant ?")){
+        exporterSauvegardeJSON();
+      }
+      localStorage.setItem("derniereSauvegardeAuto", String(Date.now()));
+    }, 5000);
+  }
+}
+setTimeout(verifierSauvegardeAuto, 8000);
+
+/* ── 3. CORBEILLE 30 JOURS ── */
+let corbeille = JSON.parse(localStorage.getItem("corbeille") || "[]");
+
+function mettreALaCorbeille(objet, type){
+  corbeille.push({ type, objet, dateSuppression: new Date().toISOString() });
+  // Purger > 30 jours
+  const limite = Date.now() - 30*24*3600*1000;
+  corbeille = corbeille.filter(c => new Date(c.dateSuppression).getTime() > limite);
+  localStorage.setItem("corbeille", JSON.stringify(corbeille));
+}
+
+function ouvrirCorbeille(){
+  const limite = Date.now() - 30*24*3600*1000;
+  corbeille = corbeille.filter(c => new Date(c.dateSuppression).getTime() > limite);
+  localStorage.setItem("corbeille", JSON.stringify(corbeille));
+
+  ouvrirModal("🗑 Corbeille (30 jours)",
+    corbeille.length === 0
+    ? `<p style="text-align:center;color:#64748b;padding:20px;">La corbeille est vide.</p>`
+    : `<div style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;">
+        ${corbeille.map((c,i)=>{
+          const o = c.objet;
+          const label = c.type === "vitrage" ? "🪟" : c.type === "mecanique" ? "🔩" : "📄";
+          const jours = Math.floor((Date.now() - new Date(c.dateSuppression))/86400000);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border-radius:8px;padding:10px 14px;">
+            <div>
+              <span style="color:#38bdf8;font-weight:bold;">${label} ${escHtml(String(o.numero||o.id||""))}</span>
+              <span style="color:#94a3b8;margin-left:8px;">${escHtml(o.client||o.titre||"")}</span>
+              <div style="font-size:11px;color:#64748b;">Supprimé il y a ${jours} jour${jours>1?"s":""} — restauration possible ${30-jours} jour${30-jours>1?"s":""}</div>
+            </div>
+            <button onclick="restaurerDepuisCorbeille(${i})" style="background:#16a34a;font-size:12px;">↩ Restaurer</button>
+          </div>`;
+        }).join("")}
+      </div>
+      <div style="margin-top:12px;text-align:right;">
+        <button onclick="viderCorbeille()" style="background:#7f1d1d;font-size:12px;">🗑 Vider la corbeille</button>
+      </div>`,
+    null
+  );
+  setTimeout(()=>{ const btn=document.getElementById("modalBtnOk"); if(btn) btn.style.display="none"; },50);
+}
+
+function restaurerDepuisCorbeille(i){
+  const c = corbeille[i];
+  if(!c) return;
+  if(c.type === "vitrage")        { dossiers.push(c.objet); renderDossiers(); }
+  else if(c.type === "mecanique") { dossiersMecanique.push(c.objet); renderDossiersMecanique(); }
+  else if(c.type === "document")  { documents.push(c.objet); renderDocuments(); }
+  corbeille.splice(i,1);
+  localStorage.setItem("corbeille", JSON.stringify(corbeille));
+  saveData();
+  majDashboard();
+  toast("✅ Élément restauré");
+  ouvrirCorbeille();
+}
+
+function viderCorbeille(){
+  if(!window.confirm("Vider définitivement la corbeille ?")) return;
+  corbeille = [];
+  localStorage.setItem("corbeille", "[]");
+  toast("Corbeille vidée");
+  fermerModal();
+}
+
+/* ── 4. SCAN PLAQUE D'IMMATRICULATION (OCR) ── */
+async function scannerPlaque(inputTargetId){
+  // Créer un input file caméra
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.capture = "environment";
+  input.onchange = async () => {
+    const file = input.files[0];
+    if(!file) return;
+    toast("🔍 Analyse de la plaque en cours...");
+    try {
+      // Charger Tesseract.js à la demande
+      if(typeof Tesseract === "undefined"){
+        await new Promise((res, rej)=>{
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const { data } = await Tesseract.recognize(file, "fra");
+      const texte = (data.text || "").toUpperCase().replace(/\s/g,"");
+      // Chercher un motif de plaque française : AA-123-AA ou AA123AA
+      const match = texte.match(/([A-Z]{2})-?(\d{3})-?([A-Z]{2})/);
+      if(match){
+        const plaque = `${match[1]}-${match[2]}-${match[3]}`;
+        const el = document.getElementById(inputTargetId);
+        if(el){ el.value = plaque; toast(`✅ Plaque détectée : ${plaque}`); }
+      } else {
+        toast("Aucune plaque détectée — saisissez manuellement","error");
+      }
+    } catch(e){
+      toast("Erreur OCR : " + e.message, "error");
+    }
+  };
+  input.click();
+}
+
+/* ── 5. ENVOYER DEVIS PAR SMS ── */
+function envoyerDocumentSMS(i){
+  const doc = documents[i];
+  if(!doc) return;
+  const dossier = doc.dossierIdx !== null ? dossiers[doc.dossierIdx] : null;
+  const tel = dossier?.telephone || "";
+  const montant = (doc.totalTTC||0).toLocaleString("fr-FR",{minimumFractionDigits:2});
+  const msg = `Bonjour${dossier?" "+dossier.client:""}, votre ${doc.type==="facture"?"facture":"devis"} ${doc.id} de ${montant} € TTC est disponible chez ${entreprise.nom||"notre garage"}. ${entreprise.telephone||""}`;
+  window.open(`sms:${tel}?body=${encodeURIComponent(msg)}`);
+}
+
+/* ── 6. DUPLIQUER UN DOCUMENT ── */
+function dupliquerDocument(i){
+  const doc = documents[i];
+  if(!doc) return;
+  lignesDocument = JSON.parse(JSON.stringify(doc.lignes || []));
+  renderLignes();
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.value=v; };
+  set("titreDocument", (doc.titre||"") + " (copie)");
+  set("typeDocument",  doc.type);
+  set("dateDocument",  new Date().toISOString().split("T")[0]);
+  set("technicienDocument", doc.technicien||"");
+  majNumeroDocument();
+  if(typeof retirerDossierRattache === "function") retirerDossierRattache();
+  showPage("devisFacture");
+  document.getElementById("titreDocument")?.scrollIntoView({behavior:"smooth"});
+  toast("📋 Document dupliqué — modifiez et sauvegardez");
+}
+
+/* ── 7. VUE AGENDA SEMAINE ── */
+
+let _agendaSemOffset = 0;
+
+function renderAgendaSemaine(){
+  const zone = document.getElementById("agendaSemaine");
+  if(!zone) return;
+
+  const now = new Date();
+  const lundi = new Date(now);
+  lundi.setDate(now.getDate() - ((now.getDay()+6)%7) + _agendaSemOffset*7);
+  lundi.setHours(0,0,0,0);
+
+  const jours = [];
+  for(let j=0;j<7;j++){
+    const d = new Date(lundi);
+    d.setDate(lundi.getDate()+j);
+    jours.push(d);
+  }
+
+  const fmtISO = d => d.toISOString().split("T")[0];
+  const nomJours = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const aujourd = fmtISO(new Date());
+
+  zone.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <button onclick="_agendaSemOffset--;renderAgendaSemaine()" style="background:#334155;padding:6px 12px;">← Sem. préc.</button>
+      <div style="font-weight:bold;color:#38bdf8;">
+        Semaine du ${lundi.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})}
+        ${_agendaSemOffset!==0?`<button onclick="_agendaSemOffset=0;renderAgendaSemaine()" style="background:#0891b2;font-size:11px;padding:3px 8px;margin-left:8px;">Aujourd'hui</button>`:""}
+      </div>
+      <button onclick="_agendaSemOffset++;renderAgendaSemaine()" style="background:#334155;padding:6px 12px;">Sem. suiv. →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+      ${jours.map((d,j)=>{
+        const iso = fmtISO(d);
+        const rdvs = rendezVous.filter(r=>r.date===iso).sort((a,b)=>(a.heure||"").localeCompare(b.heure||""));
+        const estAujourd = iso===aujourd;
+        return `<div style="background:${estAujourd?"#0c4a6e":"#0f172a"};border-radius:8px;padding:8px;min-height:110px;border:1px solid ${estAujourd?"#38bdf8":"#1e293b"};">
+          <div style="font-size:11px;font-weight:bold;color:${estAujourd?"#38bdf8":"#64748b"};text-align:center;margin-bottom:6px;">
+            ${nomJours[j]} ${d.getDate()}
+          </div>
+          ${rdvs.map(r=>`
+            <div style="background:#1e293b;border-left:2px solid #38bdf8;border-radius:4px;padding:4px 6px;margin-bottom:4px;font-size:10px;cursor:pointer;" title="${escHtml(r.motif||"")}">
+              <div style="color:#38bdf8;font-weight:bold;">${escHtml(r.heure||"")}</div>
+              <div style="color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.client||"")}</div>
+            </div>`).join("")}
+          ${rdvs.length===0?`<div style="text-align:center;color:#334155;font-size:10px;margin-top:14px;">—</div>`:""}
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function toggleVueAgenda(){
+  const zone = document.getElementById("agendaSemaine");
+  const btn  = document.getElementById("btnVueAgenda");
+  if(!zone) return;
+  const visible = zone.style.display !== "none";
+  zone.style.display = visible ? "none" : "";
+  if(btn) btn.textContent = visible ? "📅 Vue semaine" : "📋 Vue liste";
+  if(!visible) renderAgendaSemaine();
+}
+
+/* ── 9. EXPORT COMPTABLE (journal des ventes) ── */
+function exporterJournalVentes(){
+  const factures = documents.filter(d=>d.type==="facture");
+  if(factures.length===0){ toast("Aucune facture à exporter","error"); return; }
+
+  const sep = ";";
+  const lignes = [
+    ["Date","Numéro","Client","Désignation","Total HT","TVA","Total TTC","Règlement","Mode paiement"].join(sep)
+  ];
+
+  factures.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).forEach(f=>{
+    const dossier = f.dossierIdx !== null ? dossiers[f.dossierIdx] : null;
+    const ht  = (f.totalHT||f.totalTTC/1.2||0).toFixed(2).replace(".",",");
+    const ttc = (f.totalTTC||0).toFixed(2).replace(".",",");
+    const tva = ((f.totalTTC||0)-(f.totalHT||f.totalTTC/1.2||0)).toFixed(2).replace(".",",");
+    lignes.push([
+      f.date||"",
+      f.id||"",
+      (dossier?.client||f.titre||"").replace(/;/g,","),
+      (f.titre||"").replace(/;/g,","),
+      ht, tva, ttc,
+      f.statutReglement||"",
+      f.modePaiement||""
+    ].join(sep));
+  });
+
+  const csv  = "\uFEFF" + lignes.join("\n"); // BOM pour Excel
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const lien = document.createElement("a");
+  lien.href = URL.createObjectURL(blob);
+  lien.download = `Journal-Ventes-${new Date().toISOString().split("T")[0]}.csv`;
+  lien.click();
+  toast(`✅ Journal des ventes exporté (${factures.length} factures)`);
+}
+
+/* ── 11-12. PWA / SERVICE WORKER (mode hors-ligne + installation) ── */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./sw.js").catch(e=>console.warn("SW non enregistré:", e.message));
+  });
+}
+
+let _promptInstallation = null;
+window.addEventListener("beforeinstallprompt", (e)=>{
+  e.preventDefault();
+  _promptInstallation = e;
+  const btn = document.getElementById("btnInstallerApp");
+  if(btn) btn.style.display = "";
+});
+
+function installerApplication(){
+  if(!_promptInstallation){ toast("Installation non disponible sur ce navigateur","error"); return; }
+  _promptInstallation.prompt();
+  _promptInstallation.userChoice.then(choix=>{
+    if(choix.outcome === "accepted") toast("✅ Application installée !");
+    _promptInstallation = null;
+  });
+}
