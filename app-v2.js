@@ -2880,8 +2880,16 @@ function renderLignes(){
     return `<tr>
       <td>${escHtml(l.designation)}</td>
       <td style="text-align:center;font-size:12px;color:#94a3b8;">${typeLbl}</td>
-      <td style="text-align:center;">${l.qte}</td>
-      <td style="text-align:right;">${fmt2(puTTC)} €</td>
+      <td style="text-align:center;">
+        <input type="number" value="${l.qte}" min="1" step="1"
+          onchange="modifierLigneQte(${i}, this.value)"
+          style="width:60px;text-align:center;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px;color:#f1f5f9;">
+      </td>
+      <td style="text-align:right;">
+        <input type="number" value="${puTTC.toFixed(2)}" min="0" step="0.01"
+          onchange="modifierLignePrix(${i}, this.value)"
+          style="width:100px;text-align:right;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px;color:#38bdf8;font-weight:600;"> €
+      </td>
       <td style="text-align:right;font-weight:700;">${fmt2(ligTTC)} €</td>
       <td><button class="delete-btn" onclick="supprimerLigne(${i})" style="padding:3px 8px;">🗑</button></td>
     </tr>`;
@@ -11089,4 +11097,24 @@ function installerApplication(){
     if(choix.outcome === "accepted") toast("✅ Application installée !");
     _promptInstallation = null;
   });
+}
+
+
+/* ── Modification en ligne des lignes de facturation ── */
+function modifierLigneQte(i, val){
+  const l = lignesDocument[i];
+  if(!l) return;
+  const qte = parseFloat(val) || 1;
+  l.qte = Math.max(1, qte);
+  renderLignes();
+}
+
+function modifierLignePrix(i, val){
+  const l = lignesDocument[i];
+  if(!l) return;
+  const prixTTC = parseFloat(val) || 0;
+  l.prixTTC = prixTTC;
+  l.prixHT  = prixTTC / (1 + (l.tva||20)/100);
+  renderLignes();
+  toast("Prix modifié ✓");
 }
