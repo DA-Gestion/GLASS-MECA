@@ -11118,3 +11118,35 @@ function modifierLignePrix(i, val){
   renderLignes();
   toast("Prix modifié ✓");
 }
+
+/* =====================================================================
+   MENU ACCORDÉON — sections repliables
+===================================================================== */
+
+function toggleSectionMenu(secId){
+  const body    = document.getElementById(secId);
+  const chevron = document.getElementById("chevron_" + secId);
+  if(!body) return;
+  const ferme = body.style.display === "none";
+  body.style.display = ferme ? "" : "none";
+  if(chevron) chevron.style.transform = ferme ? "" : "rotate(-90deg)";
+  // Mémoriser l'état
+  const etats = JSON.parse(localStorage.getItem("menuSections") || "{}");
+  etats[secId] = ferme ? "ouvert" : "ferme";
+  localStorage.setItem("menuSections", JSON.stringify(etats));
+}
+
+// Restaurer les états au démarrage
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{
+    const etats = JSON.parse(localStorage.getItem("menuSections") || "{}");
+    Object.entries(etats).forEach(([secId, etat])=>{
+      if(etat === "ferme"){
+        const body = document.getElementById(secId);
+        const chevron = document.getElementById("chevron_" + secId);
+        if(body) body.style.display = "none";
+        if(chevron) chevron.style.transform = "rotate(-90deg)";
+      }
+    });
+  }, 200);
+});
