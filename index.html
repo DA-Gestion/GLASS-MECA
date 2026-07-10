@@ -90,6 +90,7 @@
       </div>
       <div id="secFacturation" class="nav-section-body">
       <a href="#" onclick="showPage('devisFacture');setActive(this)">🧾 Devis &amp; Factures <span id="badgeImpaye" style="background:#dc2626;color:#fff;border-radius:9999px;padding:1px 6px;font-size:11px;margin-left:4px;display:none;"></span></a>
+      <a href="#" onclick="ouvrirChiffrageVitrage();return false;">🚗 Chiffrage vitrage</a>
       <a href="#" onclick="showPage('stockPieces');setActive(this)">📦 Stock <span id="badgeStock" style="background:#dc2626;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:bold;display:none;"></span></a>
 
       <!-- ── STATS ── -->
@@ -109,6 +110,7 @@
       <a href="#" onclick="ouvrirGestionCompte();return false;">⚙️ Mon compte garage</a>
       <a href="#" onclick="ouvrirPersonnalisationCouleurs();return false;">🎨 Couleurs interface</a>
       <a href="#" onclick="ouvrirCorbeille();return false;">🗑 Corbeille</a>
+      <a href="#" onclick="ouvrirJournalActivite();return false;">📜 Journal d'activité</a>
       <a href="#" onclick="exporterJournalVentes();return false;">📊 Journal des ventes</a>
       <a href="#" id="btnInstallerApp" onclick="installerApplication();return false;" style="display:none;color:#34d399;">📲 Installer l'application</a>
       <a href="#" onclick="showPage('entreprise');setActive(this)">🏢 Mon entreprise</a>
@@ -157,6 +159,11 @@
     <!-- DASHBOARD -->
     <section id="dashboard" class="page">
       <div id="objectifCAWidget" style="margin-bottom:16px;"></div>
+      <div id="graphiqueCA12" style="margin-bottom:16px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px;">
+        <div id="topClientsWidget"></div>
+        <div id="rentabiliteWidget"></div>
+      </div>
 
       <div style="background:#070c14;border-radius:16px;padding:32px 24px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:32px;margin-bottom:24px;border:1px solid #1e293b;">
 
@@ -807,6 +814,7 @@
           <input type="text" id="societePenalites" placeholder="Pénalités de retard (ex: 3× taux légal)">
           <input type="text" id="societeIban"     placeholder="IBAN (pour virement)">
           <input type="text" id="societeBic"      placeholder="BIC / SWIFT">
+          <input type="url" id="societeAvisGoogle" placeholder="⭐ Lien avis Google (https://g.page/r/...)" style="grid-column:span 2;">
         </div>
         <div style="margin-top:12px;padding:10px 14px;background:#0f172a;border-radius:8px;border-left:3px solid #f59e0b;font-size:12px;color:#94a3b8;line-height:1.8;">
           ⚠️ <b style="color:#f59e0b;">Rappel réglementaire :</b> La facturation électronique devient obligatoire pour les PME/TPE à compter du <b>1er septembre 2027</b> (émission) et réception dès septembre 2026.<br>

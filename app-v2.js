@@ -919,6 +919,9 @@ function majDashboard(){
   set("totalVehicules",vehicules.length);
   set("caMois", totalCA.toLocaleString("fr-FR") + " €");
   setTimeout(renderObjectifCA, 100);
+  setTimeout(renderGraphiqueCA, 120);
+  setTimeout(renderTopClientsWidget, 140);
+  setTimeout(renderRentabilite, 160);
 
   majCompteursDossiers();
   renderStatistiques();
@@ -1631,11 +1634,16 @@ function supprimerDossier(index, ev){
 
 function changerStatutDossier(index, statut){
   if(!dossiers[index]) return;
+  const ancien = dossiers[index].statut;
   dossiers[index].statut = statut;
   saveData();
   renderDossiersRecent();
   majDashboard();
   toast("Statut mis à jour : " + statut);
+  journaliser(`Dossier ${dossiers[index].numero} : ${ancien||"?"} → ${statut}`);
+  // SMS automatiques selon le nouveau statut
+  if(statut === "Terminé" && ancien !== "Terminé") proposerSmsVehiculePret(dossiers[index]);
+  if(statut === "Facturé" && ancien !== "Facturé") proposerAvisGoogle(dossiers[index]);
 }
 
 function modifierDossier(index){
@@ -1900,6 +1908,9 @@ function ouvrirDossier(index){
       <button onclick="ouvrirFinancierDossier(${index})" style="background:#16a34a;font-size:14px;padding:10px 18px;">💰 Devis / Facture / Encaissement</button>
       <button onclick="imprimerDossier()" style="background:#0891b2;">🖨 Fiche dossier</button>
       <button onclick="imprimerEtiquetteVehicule(${index},'vitrage')" style="background:#0891b2;font-size:12px;">🏷 Étiquette</button>
+      <button onclick="toggleChrono(${index},'vitrage')" style="background:#7c3aed;font-size:12px;">⏱ Chrono${d.tempsPasse?` (${formatDuree(d.tempsPasse)})`:""}</button>
+      <button onclick="commanderDepuisDossier(${index})" style="background:#f59e0b;color:#000;font-size:12px;">📦 Commander pièce</button>
+      ${d.pieceCommandee?`<button onclick="changerStatutPieceDossier(${index})" style="background:${d.pieceCommandee==="Posé"?"#16a34a":d.pieceCommandee==="Reçu"?"#0891b2":"#64748b"};font-size:12px;">📦 ${d.pieceCommandee} (cliquer pour avancer)</button>`:""}
       <button onclick="afficherNoteDossier(${index})" style="background:#334155;">📝 Notes</button>
       <button onclick="ajouterPhotoDossier(${index})" style="background:#334155;">📷 Photos</button>
       <button onclick="genererDeclaration(${index})">📋 Déclaration</button>
@@ -2386,6 +2397,7 @@ function sauvegarderEntreprise(){
   entreprise.penalites       = g("societePenalites");
   entreprise.iban            = g("societeIban");
   entreprise.bic             = g("societeBic");
+  entreprise.lienAvisGoogle  = g("societeAvisGoogle");
 
   const logoInput = document.getElementById("societeLogo");
   if(logoInput && logoInput.files && logoInput.files.length > 0){
@@ -2407,6 +2419,7 @@ function sauvegarderEntreprise(){
 function chargerEntreprise(){
   const set = (id, val) => { const el=document.getElementById(id); if(el) el.value=val; };
   set("societeNom",            entreprise.nom||"");
+  set("societeAvisGoogle",     entreprise.lienAvisGoogle||"");
   set("societeAdresse",        entreprise.adresse||"");
   set("societeTelephone",      entreprise.telephone||"");
   set("societeEmail",          entreprise.email||"");
@@ -3987,6 +4000,8 @@ function ouvrirDossierMecanique(index){
         <button onclick="imprimerOrdreMission(${index})" style="background:#7c3aed;">🖨 Ordre réparation</button>
         <button onclick="genererFactureDepuisOR(${index})" style="background:#16a34a;font-size:12px;">📄 OR → Facture</button>
         <button onclick="imprimerEtiquetteVehicule(${index},'mecanique')" style="background:#0891b2;font-size:12px;">🏷 Étiquette</button>
+        <button onclick="toggleChrono(${index},'mecanique')" style="background:#7c3aed;font-size:12px;">⏱ Chrono${d.tempsPasse?` (${formatDuree(d.tempsPasse)})`:""}</button>
+        <button onclick="definirRappelEntretien(${index})" style="background:#f59e0b;color:#000;font-size:12px;">⏰ Rappel entretien</button>
         <button onclick="envoyerSmsVehiculeTermine(${index})" style="background:#0891b2;">📱 SMS</button>
         <button onclick="document.getElementById('detailMecanique').innerHTML=''" style="background:#334155;">✖ Fermer</button>
         <button class="delete-btn" onclick="supprimerDossierMecanique(${index},event)">🗑 Supprimer</button>
@@ -7519,6 +7534,7 @@ function sauvegarderDocument(){
   renderDocuments();
   majDashboard();
   majNumeroDocument();
+  journaliser(`Création ${type} ${numero} — ${totalTTC.toFixed(2)} € TTC`);
   toast(`✅ ${type === "facture" ? "Facture" : "Devis"} ${numero} sauvegardé — ${totalTTC.toLocaleString("fr-FR",{minimumFractionDigits:2})} € TTC`);
 }
 
@@ -10849,6 +10865,7 @@ setTimeout(verifierSauvegardeAuto, 8000);
 let corbeille = JSON.parse(localStorage.getItem("corbeille") || "[]");
 
 function mettreALaCorbeille(objet, type){
+  journaliser(`Suppression ${type} : ${objet?.numero||objet?.id||"?"} (${objet?.client||objet?.titre||""})`);
   corbeille.push({ type, objet, dateSuppression: new Date().toISOString() });
   // Purger > 30 jours
   const limite = Date.now() - 30*24*3600*1000;
@@ -11150,3 +11167,442 @@ document.addEventListener("DOMContentLoaded", ()=>{
     });
   }, 200);
 });
+
+/* =====================================================================
+   AMÉLIORATIONS v4 — 11 MODULES (chiffrage, chrono, commandes, SMS,
+   avis Google, entretien, graphique CA, top clients, rentabilité,
+   verrouillage, journal)
+===================================================================== */
+
+/* ── 1. CHIFFRAGE VITRAGE PAR MODÈLE ── */
+let tarifsVitrageModeles = JSON.parse(localStorage.getItem("tarifsVitrageModeles")) || [
+  { marque:"Renault",  modele:"Clio 4",   pareBrise:216, lateral:144, lunette:190 },
+  { marque:"Renault",  modele:"Clio 5",   pareBrise:240, lateral:150, lunette:200 },
+  { marque:"Peugeot",  modele:"208",      pareBrise:228, lateral:144, lunette:195 },
+  { marque:"Peugeot",  modele:"308",      pareBrise:264, lateral:156, lunette:210 },
+  { marque:"Citroën",  modele:"C3",       pareBrise:222, lateral:140, lunette:190 },
+  { marque:"Volkswagen", modele:"Golf 7", pareBrise:276, lateral:160, lunette:220 },
+  { marque:"Dacia",    modele:"Sandero",  pareBrise:198, lateral:130, lunette:175 },
+];
+
+function saveTarifsVitrageModeles(){
+  localStorage.setItem("tarifsVitrageModeles", JSON.stringify(tarifsVitrageModeles));
+}
+
+function ouvrirChiffrageVitrage(){
+  const rows = tarifsVitrageModeles.map((t,i)=>`
+    <tr>
+      <td>${escHtml(t.marque)}</td>
+      <td>${escHtml(t.modele)}</td>
+      <td style="text-align:right;color:#34d399;font-weight:700;">${t.pareBrise} €</td>
+      <td style="text-align:right;">${t.lateral} €</td>
+      <td style="text-align:right;">${t.lunette} €</td>
+      <td style="white-space:nowrap;">
+        <button onclick="injecterChiffrage(${i},'pareBrise')" style="font-size:11px;padding:3px 7px;background:#16a34a;" title="Pare-brise au devis">PB→devis</button>
+        <button onclick="supprimerChiffrageModele(${i})" class="delete-btn" style="font-size:11px;padding:3px 7px;">🗑</button>
+      </td>
+    </tr>`).join("");
+
+  ouvrirModal("🚗 Chiffrage vitrage par modèle",
+    `<div style="display:flex;flex-direction:column;gap:12px;">
+      <input type="text" id="filtreChiffrage" placeholder="🔍 Filtrer (marque ou modèle)..." oninput="filtrerChiffrage(this.value)"
+        style="width:100%;box-sizing:border-box;">
+      <div style="max-height:320px;overflow-y:auto;">
+        <table style="width:100%;font-size:13px;">
+          <thead><tr><th>Marque</th><th>Modèle</th><th style="text-align:right;">Pare-brise</th><th style="text-align:right;">Latéral</th><th style="text-align:right;">Lunette</th><th></th></tr></thead>
+          <tbody id="tbodyChiffrage">${rows}</tbody>
+        </table>
+      </div>
+      <div style="background:#0f172a;border-radius:8px;padding:12px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600;">➕ AJOUTER UN MODÈLE (prix TTC)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 90px 90px 90px auto;gap:6px;">
+          <input type="text" id="chm_marque"  placeholder="Marque">
+          <input type="text" id="chm_modele"  placeholder="Modèle">
+          <input type="number" id="chm_pb"    placeholder="PB €">
+          <input type="number" id="chm_lat"   placeholder="Lat €">
+          <input type="number" id="chm_lun"   placeholder="Lun €">
+          <button onclick="ajouterChiffrageModele()" class="btn-success">+</button>
+        </div>
+      </div>
+    </div>`, null);
+  setTimeout(()=>{ const btn=document.getElementById("modalBtnOk"); if(btn) btn.style.display="none"; },50);
+}
+
+function filtrerChiffrage(terme){
+  const t = terme.toLowerCase();
+  const tbody = document.getElementById("tbodyChiffrage");
+  if(!tbody) return;
+  Array.from(tbody.rows).forEach(r=>{
+    r.style.display = r.textContent.toLowerCase().includes(t) ? "" : "none";
+  });
+}
+
+function ajouterChiffrageModele(){
+  const g = id => document.getElementById(id)?.value.trim() || "";
+  const marque = g("chm_marque"), modele = g("chm_modele");
+  if(!marque || !modele){ toast("Marque et modèle requis","error"); return; }
+  tarifsVitrageModeles.push({
+    marque, modele,
+    pareBrise: parseFloat(g("chm_pb"))||0,
+    lateral:   parseFloat(g("chm_lat"))||0,
+    lunette:   parseFloat(g("chm_lun"))||0,
+  });
+  saveTarifsVitrageModeles();
+  toast("Modèle ajouté ✓");
+  ouvrirChiffrageVitrage();
+}
+
+function supprimerChiffrageModele(i){
+  tarifsVitrageModeles.splice(i,1);
+  saveTarifsVitrageModeles();
+  ouvrirChiffrageVitrage();
+}
+
+function injecterChiffrage(i, type){
+  const t = tarifsVitrageModeles[i];
+  if(!t) return;
+  const prix = t[type] || 0;
+  const label = type==="pareBrise" ? "Remplacement pare-brise" : type==="lateral" ? "Remplacement vitre latérale" : "Remplacement lunette arrière";
+  if(typeof lignesDocument === "undefined"){ toast("Ouvrez d'abord Devis & Factures","error"); return; }
+  lignesDocument.push({
+    designation: `${label} — ${t.marque} ${t.modele}`,
+    type:"piece", qte:1, prixTTC:prix, prixHT:prix/1.2, tva:20
+  });
+  fermerModal();
+  showPage("devisFacture");
+  setTimeout(()=>{ renderLignes(); toast(`✅ ${t.marque} ${t.modele} — ${prix} € ajouté au devis`); }, 200);
+}
+
+/* ── 2. CHRONOMÈTRE PAR DOSSIER ── */
+let _chronoActif = JSON.parse(localStorage.getItem("chronoActif")) || null;
+
+function toggleChrono(index, type){
+  const d = type==="mecanique" ? dossiersMecanique[index] : dossiers[index];
+  if(!d) return;
+  const cle = type + "_" + (d.numero||index);
+
+  if(_chronoActif && _chronoActif.cle === cle){
+    // Arrêter : cumuler le temps
+    const secondes = Math.floor((Date.now() - _chronoActif.debut)/1000);
+    d.tempsPasse = (d.tempsPasse||0) + secondes;
+    _chronoActif = null;
+    localStorage.removeItem("chronoActif");
+    saveData();
+    toast(`⏱ Chrono arrêté — ${formatDuree(d.tempsPasse)} au total sur ce dossier`);
+  } else {
+    if(_chronoActif){ toast("⚠️ Un chrono tourne déjà sur un autre dossier — arrêtez-le d'abord","error"); return; }
+    _chronoActif = { cle, type, index, debut: Date.now(), numero: d.numero };
+    localStorage.setItem("chronoActif", JSON.stringify(_chronoActif));
+    toast(`⏱ Chrono démarré sur ${d.numero||"dossier"}`);
+  }
+  majBadgeChrono();
+}
+
+function formatDuree(sec){
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60);
+  return h > 0 ? `${h}h${String(m).padStart(2,"0")}` : `${m} min`;
+}
+
+function majBadgeChrono(){
+  let badge = document.getElementById("badgeChronoGlobal");
+  if(_chronoActif){
+    if(!badge){
+      badge = document.createElement("div");
+      badge.id = "badgeChronoGlobal";
+      badge.style.cssText = "position:fixed;bottom:16px;right:16px;background:#7c3aed;color:#fff;padding:10px 16px;border-radius:99px;font-size:13px;font-weight:700;z-index:9999;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);";
+      badge.onclick = ()=>toggleChrono(_chronoActif.index, _chronoActif.type);
+      document.body.appendChild(badge);
+    }
+    const maj = ()=>{
+      if(!_chronoActif){ badge?.remove(); return; }
+      const sec = Math.floor((Date.now()-_chronoActif.debut)/1000);
+      badge.textContent = `⏱ ${_chronoActif.numero||""} — ${formatDuree(sec)} (cliquer pour arrêter)`;
+    };
+    maj();
+    if(!badge._timer) badge._timer = setInterval(maj, 30000);
+  } else if(badge){
+    clearInterval(badge._timer);
+    badge.remove();
+  }
+}
+document.addEventListener("DOMContentLoaded", ()=>setTimeout(majBadgeChrono, 800));
+
+/* ── 3. COMMANDE FOURNISSEUR DEPUIS UN DOSSIER ── */
+function commanderDepuisDossier(index){
+  const d = dossiers[index];
+  if(!d) return;
+  ouvrirModal(`📦 Commander une pièce — Dossier ${d.numero}`,
+    `<div style="display:flex;flex-direction:column;gap:10px;">
+      <input type="text" id="cmdd_piece" placeholder="Pièce (ex: Pare-brise ${escHtml(d.vehicule||"")})" value="Pare-brise ${escHtml(d.vehicule||"")}">
+      <input type="text" id="cmdd_fournisseur" placeholder="Fournisseur">
+      <input type="number" id="cmdd_prix" placeholder="Prix d'achat HT (€)" step="0.01">
+      <input type="date" id="cmdd_livraison" title="Date de livraison prévue">
+    </div>`,
+    function(){
+      const piece = document.getElementById("cmdd_piece")?.value.trim();
+      if(!piece){ toast("Désignation requise","error"); return; }
+      if(typeof commandesFournisseurs === "undefined") window.commandesFournisseurs = [];
+      commandesFournisseurs.push({
+        id: Date.now(),
+        designation: piece,
+        fournisseur: document.getElementById("cmdd_fournisseur")?.value.trim()||"",
+        prixHT: parseFloat(document.getElementById("cmdd_prix")?.value)||0,
+        dateLivraison: document.getElementById("cmdd_livraison")?.value||"",
+        dateCommande: new Date().toISOString().split("T")[0],
+        statut: "Commandé",
+        dossierNumero: d.numero,
+      });
+      d.pieceCommandee = "Commandé";
+      saveData();
+      if(typeof renderCommandes === "function") renderCommandes();
+      journaliser(`Commande pièce "${piece}" pour dossier ${d.numero}`);
+      toast(`✅ Pièce commandée — suivi dans Stock/Commandes`);
+    }
+  );
+}
+
+function changerStatutPieceDossier(index){
+  const d = dossiers[index];
+  if(!d) return;
+  const etats = ["Commandé","Reçu","Posé"];
+  const actuel = etats.indexOf(d.pieceCommandee);
+  d.pieceCommandee = etats[(actuel+1) % etats.length];
+  saveData();
+  toast(`📦 Pièce : ${d.pieceCommandee}`);
+  if(typeof ouvrirDossier === "function") ouvrirDossier(index);
+}
+
+/* ── 4. SMS "VÉHICULE PRÊT" AUTOMATIQUE (vitrage) ── */
+function proposerSmsVehiculePret(d){
+  if(!d?.telephone) return;
+  setTimeout(()=>{
+    if(window.confirm(`✅ Dossier ${d.numero} terminé !\n\nEnvoyer le SMS "véhicule prêt" à ${d.client} (${d.telephone}) ?`)){
+      const msg = `Bonjour ${d.client}, votre véhicule ${d.immat||d.vehicule||""} est prêt ! Vous pouvez venir le récupérer chez ${entreprise.nom||"notre garage"}. ${entreprise.telephone||""}`;
+      window.open(`sms:${d.telephone}?body=${encodeURIComponent(msg)}`);
+    }
+  }, 400);
+}
+
+/* ── 5. DEMANDE D'AVIS GOOGLE APRÈS FACTURATION ── */
+function proposerAvisGoogle(d){
+  const lien = entreprise.lienAvisGoogle || "";
+  if(!lien || !d?.telephone) return;
+  setTimeout(()=>{
+    if(window.confirm(`⭐ Dossier ${d.numero} facturé !\n\nEnvoyer une demande d'avis Google à ${d.client} ?`)){
+      const msg = `Merci ${d.client} pour votre confiance ! Si vous êtes satisfait de ${entreprise.nom||"notre garage"}, laissez-nous un avis : ${lien}`;
+      window.open(`sms:${d.telephone}?body=${encodeURIComponent(msg)}`);
+    }
+  }, 400);
+}
+
+/* ── 6. RAPPEL ENTRETIEN PÉRIODIQUE (mécanique) ── */
+function definirRappelEntretien(index){
+  const d = dossiersMecanique[index];
+  if(!d) return;
+  ouvrirModal(`⏰ Rappel entretien — ${escHtml(d.client||"")}`,
+    `<div style="display:flex;flex-direction:column;gap:10px;">
+      <p style="font-size:12px;color:#64748b;">L'application vous alertera 30 jours avant la date pour relancer le client.</p>
+      <label style="font-size:12px;color:#94a3b8;">Prochain entretien prévu :</label>
+      <input type="date" id="rappelEntretienDate" value="${d.prochainEntretien||""}">
+      <input type="text" id="rappelEntretienMotif" placeholder="Motif (ex: Révision, vidange, CT...)" value="${escHtml(d.motifEntretien||"")}">
+    </div>`,
+    function(){
+      d.prochainEntretien = document.getElementById("rappelEntretienDate")?.value||"";
+      d.motifEntretien    = document.getElementById("rappelEntretienMotif")?.value.trim()||"";
+      saveData();
+      toast(d.prochainEntretien ? `⏰ Rappel défini au ${new Date(d.prochainEntretien+"T00:00:00").toLocaleDateString("fr-FR")}` : "Rappel supprimé");
+    }
+  );
+}
+
+function verifierRappelsEntretien(){
+  if(typeof dossiersMecanique === "undefined") return;
+  const dans30j = Date.now() + 30*24*3600*1000;
+  const arelancer = dossiersMecanique.filter(d=>{
+    if(!d.prochainEntretien || d.entretienRelance) return false;
+    const dt = new Date(d.prochainEntretien+"T00:00:00").getTime();
+    return dt > Date.now()-7*24*3600*1000 && dt < dans30j;
+  });
+  if(arelancer.length > 0){
+    const liste = document.getElementById("listeNotifications");
+    const zone  = document.getElementById("zoneNotifications");
+    arelancer.forEach(d=>{
+      toast(`⏰ Entretien à venir : ${d.client} — ${d.motifEntretien||"révision"} le ${new Date(d.prochainEntretien+"T00:00:00").toLocaleDateString("fr-FR")}`);
+      if(liste && zone){
+        const div = document.createElement("div");
+        div.style.cssText = "display:flex;gap:6px;padding:4px 6px;border-left:2px solid #f59e0b;";
+        div.innerHTML = `<span style="font-size:11px;color:#94a3b8;">⏰ ${escHtml(d.client)} — ${escHtml(d.motifEntretien||"entretien")} le ${new Date(d.prochainEntretien+"T00:00:00").toLocaleDateString("fr-FR")}
+          ${d.telephone?` — <a href="sms:${d.telephone}?body=${encodeURIComponent(`Bonjour ${d.client}, votre ${d.motifEntretien||"entretien"} approche. Prenez rendez-vous chez ${entreprise.nom||"nous"} : ${entreprise.telephone||""}`)}" style="color:#38bdf8;">📱 SMS</a>`:""}</span>`;
+        liste.appendChild(div);
+        zone.style.display = "";
+      }
+    });
+  }
+}
+setTimeout(verifierRappelsEntretien, 4000);
+
+/* ── 7. GRAPHIQUE CA 12 MOIS ── */
+function renderGraphiqueCA(){
+  const el = document.getElementById("graphiqueCA12");
+  if(!el) return;
+
+  const mois = [];
+  const now = new Date();
+  for(let i=11;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    mois.push({ y:d.getFullYear(), m:d.getMonth(), label:d.toLocaleDateString("fr-FR",{month:"short"}), ca:0 });
+  }
+
+  const ajouterCA = (dateStr, montant)=>{
+    if(!dateStr || !montant) return;
+    const dt = new Date(dateStr);
+    const slot = mois.find(x=>x.y===dt.getFullYear() && x.m===dt.getMonth());
+    if(slot) slot.ca += Number(montant);
+  };
+
+  dossiers.forEach(d=>ajouterCA(d.dateCreation||d.date, d.facture));
+  (typeof dossiersMecanique!=="undefined"?dossiersMecanique:[]).forEach(d=>ajouterCA(d.dateCreation||d.date, d.facture));
+
+  const maxCA = Math.max(...mois.map(m=>m.ca), 1);
+  const fmtE = v => Math.round(v).toLocaleString("fr-FR")+" €";
+
+  el.innerHTML = `
+    <div style="background:#1e293b;border-radius:12px;padding:16px;">
+      <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:12px;">📈 CA sur 12 mois</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:130px;">
+        ${mois.map(m=>{
+          const h = Math.max(3, Math.round(m.ca/maxCA*110));
+          const estActuel = m.m===now.getMonth() && m.y===now.getFullYear();
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;" title="${m.label} : ${fmtE(m.ca)}">
+            <div style="font-size:9px;color:#64748b;">${m.ca>0?fmtE(m.ca):""}</div>
+            <div style="width:100%;height:${h}px;background:${estActuel?"linear-gradient(180deg,#38bdf8,#0891b2)":"#334155"};border-radius:3px 3px 0 0;"></div>
+            <div style="font-size:9px;color:${estActuel?"#38bdf8":"#64748b"};">${m.label}</div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+/* ── 8. TOP CLIENTS ── */
+function renderTopClientsWidget(){
+  const el = document.getElementById("topClientsWidget");
+  if(!el) return;
+
+  const parClient = {};
+  const compter = d=>{
+    const nom = (d.client||"").trim();
+    if(!nom || !d.facture) return;
+    if(!parClient[nom]) parClient[nom] = { ca:0, nb:0 };
+    parClient[nom].ca += Number(d.facture);
+    parClient[nom].nb++;
+  };
+  dossiers.forEach(compter);
+  (typeof dossiersMecanique!=="undefined"?dossiersMecanique:[]).forEach(compter);
+
+  const top = Object.entries(parClient).sort((a,b)=>b[1].ca-a[1].ca).slice(0,5);
+  if(top.length===0){ el.innerHTML=""; return; }
+  const maxCA = top[0][1].ca;
+  const medailles = ["🥇","🥈","🥉","4.","5."];
+  const fmtE = v => v.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €";
+
+  el.innerHTML = `
+    <div style="background:#1e293b;border-radius:12px;padding:16px;">
+      <div style="font-size:13px;font-weight:700;color:#c9a86c;margin-bottom:12px;">🏆 Top 5 clients</div>
+      ${top.map(([nom,s],i)=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="width:26px;">${medailles[i]}</span>
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;">
+              <span style="color:#f1f5f9;">${escHtml(nom)}</span>
+              <span style="color:#34d399;font-weight:700;">${fmtE(s.ca)}</span>
+            </div>
+            <div style="background:#0f172a;border-radius:99px;height:5px;margin-top:3px;">
+              <div style="width:${Math.round(s.ca/maxCA*100)}%;height:100%;background:#c9a86c;border-radius:99px;"></div>
+            </div>
+          </div>
+        </div>`).join("")}
+    </div>`;
+}
+
+/* ── 9. RENTABILITÉ PAR TYPE (€/heure via chrono) ── */
+function renderRentabilite(){
+  const el = document.getElementById("rentabiliteWidget");
+  if(!el) return;
+
+  const calc = (liste)=>{
+    let ca=0, sec=0, nb=0;
+    liste.forEach(d=>{ if(d.facture){ ca+=Number(d.facture); nb++; if(d.tempsPasse) sec+=d.tempsPasse; }});
+    return { ca, heures: sec/3600, nb, tauxHoraire: sec>0 ? ca/(sec/3600) : null };
+  };
+  const vit = calc(dossiers);
+  const mec = calc(typeof dossiersMecanique!=="undefined"?dossiersMecanique:[]);
+  const fmtE = v => Math.round(v).toLocaleString("fr-FR")+" €";
+
+  el.innerHTML = `
+    <div style="background:#1e293b;border-radius:12px;padding:16px;">
+      <div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:12px;">⚖️ Rentabilité par activité</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        ${[["🪟 Vitrage",vit,"#38bdf8"],["🔩 Mécanique",mec,"#7c3aed"]].map(([lbl,s,col])=>`
+          <div style="background:#0f172a;border-radius:8px;padding:12px;border-top:2px solid ${col};">
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">${lbl}</div>
+            <div style="font-size:16px;font-weight:900;color:${col};">${fmtE(s.ca)}</div>
+            <div style="font-size:11px;color:#64748b;">${s.nb} dossier${s.nb>1?"s":""} facturé${s.nb>1?"s":""}</div>
+            ${s.tauxHoraire!==null
+              ? `<div style="font-size:13px;color:#34d399;font-weight:700;margin-top:4px;">${fmtE(s.tauxHoraire)}/h <span style="font-size:10px;color:#64748b;">(${s.heures.toFixed(1)}h chronométrées)</span></div>`
+              : `<div style="font-size:10px;color:#475569;margin-top:4px;">Utilisez le chrono ⏱ pour voir le taux horaire</div>`}
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
+
+/* ── 10. VERROUILLAGE AUTOMATIQUE (30 min d'inactivité) ── */
+let _derniereActivite = Date.now();
+["click","keydown","mousemove","touchstart","scroll"].forEach(ev=>{
+  document.addEventListener(ev, ()=>{ _derniereActivite = Date.now(); }, {passive:true});
+});
+
+setInterval(()=>{
+  const session = getSessionUtilisateur();
+  if(!session) return;
+  const inactifMin = (Date.now() - _derniereActivite) / 60000;
+  const limite = parseInt(localStorage.getItem("verrouillageMinutes") || "30");
+  if(limite > 0 && inactifMin >= limite){
+    sessionStorage.removeItem("session_user");
+    journaliser("Verrouillage automatique (inactivité)");
+    toast("🔒 Session verrouillée après inactivité");
+    setTimeout(()=>window.location.reload(), 1200);
+  }
+}, 60000);
+
+/* ── 11. JOURNAL D'ACTIVITÉ ── */
+let journalActivite = JSON.parse(localStorage.getItem("journalActivite") || "[]");
+
+function journaliser(action){
+  const session = getSessionUtilisateur();
+  journalActivite.unshift({
+    date: new Date().toISOString(),
+    user: session?.nom || session?.login || "?",
+    action: String(action).substring(0, 200)
+  });
+  if(journalActivite.length > 500) journalActivite = journalActivite.slice(0, 500);
+  localStorage.setItem("journalActivite", JSON.stringify(journalActivite));
+}
+
+function ouvrirJournalActivite(){
+  ouvrirModal("📜 Journal d'activité (500 dernières actions)",
+    journalActivite.length === 0
+    ? `<p style="text-align:center;color:#64748b;padding:20px;">Aucune action enregistrée pour le moment.</p>`
+    : `<div style="max-height:440px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+        ${journalActivite.map(j=>`
+          <div style="display:flex;gap:10px;background:#0f172a;border-radius:6px;padding:7px 10px;font-size:12px;">
+            <span style="color:#64748b;white-space:nowrap;">${new Date(j.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>
+            <span style="color:#38bdf8;white-space:nowrap;">${escHtml(j.user)}</span>
+            <span style="color:#94a3b8;">${escHtml(j.action)}</span>
+          </div>`).join("")}
+      </div>
+      <div style="margin-top:10px;text-align:right;">
+        <button onclick="if(window.confirm('Vider le journal ?')){journalActivite=[];localStorage.setItem('journalActivite','[]');fermerModal();toast('Journal vidé');}" style="background:#7f1d1d;font-size:12px;">🗑 Vider</button>
+      </div>`,
+    null);
+  setTimeout(()=>{ const btn=document.getElementById("modalBtnOk"); if(btn) btn.style.display="none"; },50);
+}
