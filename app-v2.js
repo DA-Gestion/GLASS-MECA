@@ -9698,8 +9698,11 @@ document.addEventListener("DOMContentLoaded",()=>{
 ===================================================================== */
 
 /* ── Obtenir l'ID unique du garage ── */
+/* Identifiant de garage par défaut — tous les appareils arrivent sur cet espace */
+const GARAGE_ID_DEFAUT = "DA-GESTION";
+
 function _getGarageId(){
-  // Priorité : URL param > localStorage > générer nouveau
+  // Priorité : URL param > localStorage > identifiant par défaut du garage
   const urlParams = new URLSearchParams(window.location.search);
   const urlGarageId = urlParams.get("garage");
   if(urlGarageId && /^[a-zA-Z0-9_-]{4,32}$/.test(urlGarageId)){
@@ -9710,12 +9713,9 @@ function _getGarageId(){
   if(stored && /^[a-zA-Z0-9_-]{4,32}$/.test(stored)){
     return stored;
   }
-  // Générer un ID unique basé sur le nom garage + timestamp
-  const nomGarage = (entreprise?.nom || "garage").toLowerCase()
-    .replace(/[^a-z0-9]/g, "").substring(0, 12);
-  const newId = nomGarage + "_" + Date.now().toString(36);
-  localStorage.setItem("garageId", newId);
-  return newId;
+  // Nouvel appareil → utiliser l'identifiant du garage (plus de génération aléatoire)
+  localStorage.setItem("garageId", GARAGE_ID_DEFAUT);
+  return GARAGE_ID_DEFAUT;
 }
 
 /* ── Interface de gestion du compte garage ── */
