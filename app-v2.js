@@ -67,6 +67,15 @@ function connecterUtilisateur(login, motDePasse){
     return false;
   });
   if(user){
+    // Vérifier la période d'utilisation (date d'expiration)
+    if(user.dateExpiration){
+      const expire = new Date(user.dateExpiration + "T23:59:59").getTime();
+      if(Date.now() > expire){
+        toast("⛔ Ce compte a expiré le " + new Date(user.dateExpiration + "T00:00:00").toLocaleDateString("fr-FR") + " — contactez l'administrateur", "error");
+        if(typeof journaliser === "function") journaliser(`Connexion refusée (compte expiré) : ${user.login}`);
+        return null;
+      }
+    }
     // Migration : si mot de passe encore en clair, on le hash
     if(user.motDePasse && !user.motDePasseHash){
       user.motDePasseHash = hashPassword(user.motDePasse);
@@ -171,12 +180,13 @@ function afficherUtilisateurConnecte(user){
       <div style="font-size:12px;color:#94a3b8;">Connecté en tant que</div>
       <div style="font-weight:bold;color:#38bdf8;font-size:14px;">${escHtml(user.nom)}</div>
       <div style="font-size:11px;color:#7c3aed;">${user.role==="admin" ? "🔑 Administrateur" : "👤 Utilisateur"}</div>
+      ${user.role==="admin" ? `<button onclick="showPage('administration')" style="margin-top:8px;width:100%;padding:5px 8px;font-size:12px;background:#7c3aed;">🔑 Administration</button>` : ""}
       <button onclick="deconnecterUtilisateur()" class="delete-btn" style="margin-top:8px;width:100%;padding:5px 8px;font-size:12px;">🚪 Déconnexion</button>
     </div>`;
 
-  // Afficher l'onglet Administration uniquement pour les admins
+  // L'ancien lien Administration du menu est masqué (déplacé dans le cadre ci-dessus)
   const lienAdmin = document.getElementById("lienAdmin");
-  if(lienAdmin) lienAdmin.style.display = user.role === "admin" ? "" : "none";
+  if(lienAdmin) lienAdmin.style.display = "none";
 }
 
 function ouvrirGestionUtilisateurs(){
@@ -187,7 +197,7 @@ function ouvrirGestionUtilisateurs(){
       <h2>👥 Gestion des utilisateurs</h2>
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Accès</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Accès</th><th>Expiration</th><th>Actions</th></tr></thead>
           <tbody>
             ${users.map((u,i) => `<tr>
               <td>${escHtml(u.login)}</td>
@@ -215,6 +225,7 @@ function ouvrirGestionUtilisateurs(){
           <option value="vitrage">🪟 Vitrage uniquement</option>
           <option value="mecanique">🔩 Mécanique uniquement</option>
         </select>
+        <input type="date" id="newExpiration" title="Date d'expiration du compte (vide = illimité)">
         <button onclick="ajouterUtilisateur()">➕ Ajouter</button>
         <button onclick="document.getElementById('gestionUsers').remove()">✖ Fermer</button>
       </div>
@@ -244,6 +255,12 @@ function renderAdministration(){
         </select>
       </td>
       <td>
+        <input type="date" value="${u.dateExpiration||""}" onchange="changerExpirationUtilisateur(${i},this.value)"
+          style="font-size:12px;padding:4px 6px;background:#1e293b;color:${u.dateExpiration && new Date(u.dateExpiration+"T23:59:59") < new Date() ? "#f87171" : "#f1f5f9"};border:1px solid #334155;border-radius:6px;"
+          title="Date d'expiration (vide = illimité)">
+        ${u.dateExpiration && new Date(u.dateExpiration+"T23:59:59") < new Date() ? '<div style="font-size:10px;color:#f87171;">⛔ Expiré</div>' : ""}
+      </td>
+      <td>
         <input type="password" id="editPass_${i}" placeholder="Nouveau mot de passe" style="width:140px;padding:5px 8px;font-size:12px;">
         <button onclick="changerPassUtilisateur(${i})" style="padding:5px 8px;font-size:12px;">💾</button>
       </td>
@@ -264,7 +281,8 @@ function ajouterUtilisateur(){
   const users = getUtilisateurs();
   if(users.some(u => u.login === login)){ toast("Cet identifiant existe déjà", "error"); return; }
   const acces = document.getElementById("newAcces")?.value || "tous";
-  users.push({ login, motDePasseHash: hashPassword(pass), nom, role, acces });
+  const dateExpiration = document.getElementById("newExpiration")?.value || "";
+  users.push({ login, motDePasseHash: hashPassword(pass), nom, role, acces, dateExpiration });
   saveUtilisateurs(users);
   ["newLogin","newNom","newPass"].forEach(id => { const el=document.getElementById(id); if(el) el.value=""; });
   toast("Utilisateur ajouté ✓");
@@ -11605,4 +11623,18 @@ function ouvrirJournalActivite(){
       </div>`,
     null);
   setTimeout(()=>{ const btn=document.getElementById("modalBtnOk"); if(btn) btn.style.display="none"; },50);
+}
+
+
+/* ── Période d'utilisation des comptes ── */
+function changerExpirationUtilisateur(index, date){
+  const users = getUtilisateurs();
+  if(!users[index]) return;
+  users[index].dateExpiration = date || "";
+  saveUtilisateurs(users);
+  journaliser(`Expiration compte ${users[index].login} : ${date || "illimité"}`);
+  toast(date
+    ? `⏳ Compte ${users[index].login} expire le ${new Date(date+"T00:00:00").toLocaleDateString("fr-FR")}`
+    : `♾️ Compte ${users[index].login} sans limite`);
+  renderAdministration();
 }

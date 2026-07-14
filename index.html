@@ -100,6 +100,9 @@
       </div>
       <div id="secStats" class="nav-section-body">
       <a href="#" onclick="showPage('dashboardMecanique');setActive(this)">📊 Stats mécanique</a>
+      <a href="#" onclick="exporterJournalVentes();return false;">📊 Journal des ventes</a>
+      <a href="#" onclick="ouvrirJournalActivite();return false;">📜 Journal d'activité</a>
+      <a href="#" onclick="exporterExcelGlobal();return false;">📥 Export Excel</a>
 
       <!-- ── PARAMÈTRES ── -->
       </div>
@@ -107,17 +110,21 @@
         <span>⚙ PARAMÈTRES</span><span id="chevron_secParams" style="font-size:10px;transition:transform .2s;">▼</span>
       </div>
       <div id="secParams" class="nav-section-body">
-      <a href="#" onclick="ouvrirGestionCompte();return false;">⚙️ Mon compte garage</a>
       <a href="#" onclick="ouvrirPersonnalisationCouleurs();return false;">🎨 Couleurs interface</a>
       <a href="#" onclick="ouvrirCorbeille();return false;">🗑 Corbeille</a>
-      <a href="#" onclick="ouvrirJournalActivite();return false;">📜 Journal d'activité</a>
-      <a href="#" onclick="exporterJournalVentes();return false;">📊 Journal des ventes</a>
       <a href="#" id="btnInstallerApp" onclick="installerApplication();return false;" style="display:none;color:#34d399;">📲 Installer l'application</a>
-      <a href="#" onclick="showPage('entreprise');setActive(this)">🏢 Mon entreprise</a>
       <a href="#" id="btnTheme" onclick="toggleTheme();return false;">☀️ Mode clair</a>
-      <a href="#" onclick="exporterExcelGlobal();return false;">📊 Export Excel</a>
-      <a href="#" id="lienAdmin" onclick="showPage('administration');setActive(this)" style="display:none;border-top:1px solid #1e3a5f;margin-top:8px;padding-top:12px;color:#a78bfa;">🔑 Administration</a>
-    </div>
+      <a href="#" id="lienAdmin" onclick="showPage('administration');setActive(this)" style="display:none;">🔑 Administration</a>
+      </div>
+
+      <!-- ── MON GARAGE ── -->
+      <div class="nav-section-label nav-accordeon" onclick="toggleSectionMenu('secGarage')" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;">
+        <span>🏢 MON GARAGE</span><span id="chevron_secGarage" style="font-size:10px;transition:transform .2s;">▼</span>
+      </div>
+      <div id="secGarage" class="nav-section-body">
+      <a href="#" onclick="ouvrirGestionCompte();return false;">⚙️ Mon compte garage</a>
+      <a href="#" onclick="showPage('entreprise');setActive(this)">🏢 Mon entreprise</a>
+      </div>
       </nav>
 
     <div class="sidebar-footer">
@@ -1356,6 +1363,8 @@
                 <th>Identifiant</th>
                 <th>Nom</th>
                 <th>Rôle</th>
+                <th>Accès</th>
+                <th>Expiration</th>
                 <th>Mot de passe</th>
                 <th>Actions</th>
               </tr>
